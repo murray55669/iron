@@ -1,0 +1,16 @@
+{
+	"name": "iron",
+	"author": "murray55669",
+	"version": "0.0.1",
+	"license": "MIT",
+	"description": "tbd",
+	"scripts": {
+		"test": "eslint js && stylelint css/main.css"
+	},
+	"repository": "murray55669/iron",
+	"dependencies": {
+		"eslint": "^4.9.0",
+		"stylelint": "^8.2.0",
+		"stylelint-config-standard": "^17.0.0"
+	}
+}
