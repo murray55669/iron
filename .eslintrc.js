@@ -5,6 +5,10 @@ module.exports = {
 		"es6": true,
 		"jquery": true
 	},
+	"parserOptions": {
+		"ecmaVersion": 6,
+		"sourceType": "module"
+	},
 	"rules": {
 		"accessor-pairs": "error",
 		"arrow-spacing": ["error", {"before": true, "after": true}],
@@ -42,6 +46,7 @@ module.exports = {
 		"no-class-assign": "error",
 		"no-compare-neg-zero": "error",
 		"no-cond-assign": "error",
+		"no-console": 0,
 		"no-const-assign": "error",
 		"no-constant-condition": ["error", {"checkLoops": false}],
 		"no-control-regex": "error",

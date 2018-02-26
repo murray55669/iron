@@ -5,11 +5,14 @@
 	"license": "MIT",
 	"description": "tbd",
 	"scripts": {
-		"test": "eslint js && stylelint css/main.css"
+		"test": "eslint js && stylelint css/main.css",
+		"serve": "node ./server.js"
 	},
 	"repository": "murray55669/iron",
 	"dependencies": {
 		"eslint": "^4.9.0",
+		"express": "^4.16.2",
+		"socket.io": "^2.0.4",
 		"stylelint": "^8.2.0",
 		"stylelint-config-standard": "^17.0.0"
 	}
