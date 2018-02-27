@@ -17,7 +17,7 @@ app.use("/js", express.static(path.resolve(__dirname, "js")));
 
 // Routing
 app.get("/", function (request, response) {
-	response.sendFile(path.join(__dirname, 'index.html'));
+	response.sendFile(path.join(__dirname, "index.html"));
 });
 
 // Starts the server.
@@ -26,10 +26,34 @@ server.listen(SERVER_PORT, function () {
 });
 
 // Add the WebSocket handlers
+const players = {};
 io.on("connection", function (socket) {
+	socket.on("new player", function () {
+		players[socket.id] = {
+			x: 300,
+			y: 300
+		};
+	});
+	socket.on("movement", function (data) {
+		const player = players[socket.id] || {};
+		if (data.left) {
+			player.x -= 5;
+		}
+		if (data.up) {
+			player.y -= 5;
+		}
+		if (data.right) {
+			player.x += 5;
+		}
+		if (data.down) {
+			player.y += 5;
+		}
+	});
+	socket.on("disconnect", function () {
+		delete players[socket.id];
+	});
 });
 
-// FIXME remove
 setInterval(function () {
-	io.sockets.emit("message", "hi!");
-}, 1000);
+	io.sockets.emit("state", players);
+}, 1000 / 60);
