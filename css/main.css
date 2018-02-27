@@ -2,3 +2,47 @@ body {
 	width: 100vw;
 	height: 100vh;
 }
+
+.bg0 {
+	background: #fff;
+}
+
+.bg1 {
+	background: #f0f0f0;
+}
+
+.bg2 {
+	background: #e0e0e0;
+}
+
+.viewport-wrp {
+	position: fixed;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 100vw;
+	height: 100vh;
+}
+
+canvas.viewport {
+	width: 800px;
+	height: 600px;
+	border: 5px solid black;
+	margin: 0 auto;
+}
+
+.overlay-wrp {
+	position: fixed;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 100vw;
+	height: 100vh;
+	z-index: 1000;
+}
+
+.overlay-wrp-inn {
+	border: 1px black;
+	display: flex;
+	flex-direction: column;
+}

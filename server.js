@@ -9,32 +9,37 @@ const app = express();
 const server = http.Server(app);
 const io = socketIO(server);
 
+const TICK_RATE = 1000 / 60;
 const SERVER_PORT = 1337;
 
 app.set("port", SERVER_PORT);
-app.use("/static", express.static(path.resolve(__dirname, "static")));
+app.use("/img", express.static(path.resolve(__dirname, "img")));
 app.use("/js", express.static(path.resolve(__dirname, "js")));
+app.use("/lib", express.static(path.resolve(__dirname, "lib")));
+app.use("/css", express.static(path.resolve(__dirname, "css")));
 
 // Routing
-app.get("/", function (request, response) {
+app.get("/", (request, response) => {
 	response.sendFile(path.join(__dirname, "index.html"));
 });
 
 // Starts the server.
-server.listen(SERVER_PORT, function () {
+server.listen(SERVER_PORT, () => {
 	console.log(`Starting server on port ${SERVER_PORT}`);
 });
 
 // Add the WebSocket handlers
 const players = {};
-io.on("connection", function (socket) {
-	socket.on("new player", function () {
+io.on("connection", (socket) => {
+	socket.on("new player", (data) => {
 		players[socket.id] = {
 			x: 300,
-			y: 300
+			y: 300,
+			color: data.color,
+			name: data.name
 		};
 	});
-	socket.on("movement", function (data) {
+	socket.on("movement", (data) => {
 		const player = players[socket.id] || {};
 		if (data.left) {
 			player.x -= 5;
@@ -49,11 +54,11 @@ io.on("connection", function (socket) {
 			player.y += 5;
 		}
 	});
-	socket.on("disconnect", function () {
+	socket.on("disconnect", () => {
 		delete players[socket.id];
 	});
 });
 
-setInterval(function () {
+setInterval(() => {
 	io.sockets.emit("state", players);
-}, 1000 / 60);
+}, TICK_RATE);
