@@ -10,7 +10,7 @@ const server = http.Server(app);
 const io = socketIO(server);
 
 const TICK_RATE = 1000 / 60;
-const SERVER_PORT = 1337;
+const SERVER_PORT = process.env.PORT || 1337;
 
 app.set("port", SERVER_PORT);
 app.use("/img", express.static(path.resolve(__dirname, "img")));
