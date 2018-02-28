@@ -5,8 +5,8 @@
 	"license": "MIT",
 	"description": "tbd",
 	"scripts": {
-		"test": "eslint js && stylelint css/main.css",
-		"serve": "node ./server.js"
+        "start": "node server.js",
+		"test": "eslint js && stylelint css/main.css"
 	},
 	"repository": "murray55669/iron",
 	"dependencies": {
