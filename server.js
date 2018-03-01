@@ -5,6 +5,7 @@ const express = require("express");
 const http = require("http");
 const path = require("path");
 const socketIO = require("socket.io");
+const mat = require("gl-matrix");
 const app = express();
 const server = http.Server(app);
 const io = socketIO(server);
@@ -31,28 +32,18 @@ server.listen(SERVER_PORT, () => {
 // Add the WebSocket handlers
 const players = {};
 io.on("connection", (socket) => {
-	socket.on("new player", (data) => {
+	socket.on("player-new", (data) => {
 		players[socket.id] = {
 			x: 300,
 			y: 300,
 			color: data.color,
-			name: data.name
+			name: data.name,
+			input: {}
 		};
 	});
-	socket.on("movement", (data) => {
+	socket.on("player-input", (data) => {
 		const player = players[socket.id] || {};
-		if (data.left) {
-			player.x -= 5;
-		}
-		if (data.up) {
-			player.y -= 5;
-		}
-		if (data.right) {
-			player.x += 5;
-		}
-		if (data.down) {
-			player.y += 5;
-		}
+		player.input = data;
 	});
 	socket.on("disconnect", () => {
 		delete players[socket.id];
@@ -60,5 +51,12 @@ io.on("connection", (socket) => {
 });
 
 setInterval(() => {
+	Object.values(players).forEach(p => {
+		const vMove = [(p.input.right || 0) - (p.input.left || 0), (p.input.down || 0) - (p.input.up || 0)];
+		mat.vec2.scale(vMove, mat.vec2.normalize(vMove, vMove), 5);
+		p.x += vMove[0];
+		p.y += vMove[1];
+	});
+
 	io.sockets.emit("state", players);
 }, TICK_RATE);
