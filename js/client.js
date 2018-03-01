@@ -107,8 +107,22 @@ class Game {
 		canvas.width = 800;
 		canvas.height = 600;
 		const ctx = canvas.getContext("2d");
-		socket.on("state", function (players) {
+		let players = {};
+
+		socket.on("state", function (playersData) {
+			players = playersData;
+		});
+
+		let then = 0;
+		let fpsSmooth = 0.99; // larger = more smoothing
+		let fps = 60;
+		function tick (now) {
+			const deltaTime = now - then;
+			then = now;
+
 			ctx.clearRect(0, 0, 800, 600);
+
+			// draw players
 			Object.keys(players).forEach(key => {
 				const player = players[key];
 				ctx.fillStyle = player.color;
@@ -125,7 +139,18 @@ class Game {
 				ctx.font = "12px serif";
 				ctx.fillText(player.name, player.x - 10, player.y + 25);
 			});
-		});
+
+			// draw FPS
+			ctx.fillStyle = "black";
+			ctx.font = "12px serif";
+			let curFps = 1000 / deltaTime;
+			curFps = (curFps * fpsSmooth) + (fps * (1 - fpsSmooth));
+			ctx.fillText(`FPS: ${curFps.toFixed(2)}`, 0, 12);
+			fps = curFps;
+
+			requestAnimationFrame(tick);
+		}
+		requestAnimationFrame(tick);
 	}
 }
 
