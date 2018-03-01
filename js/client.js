@@ -95,12 +95,12 @@ class Game {
 			}
 		});
 
-		socket.emit("new player", {
+		socket.emit("player-new", {
 			name: this.username,
 			color: this.color
 		});
 		setInterval(function () {
-			socket.emit("movement", movement);
+			socket.emit("player-input", movement);
 		}, SEND_RATE);
 
 		const canvas = document.getElementById("viewport");
