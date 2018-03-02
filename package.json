@@ -6,7 +6,9 @@
 	"description": "tbd",
 	"scripts": {
 		"start": "node server.js",
-		"test": "eslint js && stylelint css/main.css"
+		"test": "eslint js && stylelint scss/main.scss && stylelint scss/reset.scss",
+		"build:css": "node-sass --source-map=true --output-style=compressed scss/main.scss css/main.css && node-sass --source-map=true --output-style=compressed scss/reset.scss css/reset.css",
+		"postinstall": "npm run build:css"
 	},
 	"repository": "murray55669/iron",
 	"dependencies": {
@@ -15,6 +17,7 @@
 		"gl-matrix": "^2.4.0",
 		"socket.io": "^2.0.4",
 		"stylelint": "^8.2.0",
-		"stylelint-config-standard": "^17.0.0"
+		"stylelint-config-standard": "^17.0.0",
+		"node-sass": "^4.7.2"
 	}
 }

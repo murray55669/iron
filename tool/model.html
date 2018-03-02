@@ -1,0 +1,49 @@
+<html>
+<head>
+	<title>Model</title>
+	<link rel="icon" href="../img/favicon.png">
+	<link rel="stylesheet" href="../css/reset.css">
+	<link rel="stylesheet" href="../css/main.css">
+	<script src="../lib/jquery-3.3.1.min.js"></script>
+
+	<style>
+		.pane {
+			height: calc(100vh - 1rem);
+			display: flex;
+			flex-direction: column;
+			flex-shrink: 0;
+			min-width: 100px;
+			justify-content: center;
+			width: calc(((100vw - 810px) / 2) - 1rem);
+			padding: 0.5rem;
+			overflow-y: auto;
+		}
+
+		.pane * {
+			max-height: 100%;
+		}
+
+		.spaced-between {
+			display: flex;
+			justify-content: space-between;
+		}
+	</style>
+</head>
+<body>
+
+<div class="viewport-wrp">
+	<div class="pane" id="control">
+		<button id="btn-done">Done</button>
+		<button id="btn-clear">Clear</button>
+		<div class="spaced-between"><span>Line Colour</span><input type="color" id="ipt-cul-line"></div>
+		<div class="spaced-between"><span>Fill Colour</span><input type="color" id="ipt-cul-fill" value="#888888"></div>
+	</div>
+	<canvas id="viewport" class="viewport"></canvas>
+	<div class="pane" id="output">
+		<pre id="out-shape"></pre>
+	</div>
+</div>
+
+</body>
+<script src="../js/model.js"></script>
+</html>
