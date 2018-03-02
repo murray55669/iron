@@ -6,8 +6,8 @@
 	"description": "tbd",
 	"scripts": {
 		"start": "node server.js",
-		"test": "eslint js && stylelint css/main.css",
-		"build:css": "node-sass --source-map=true --output-style=compressed scss/main.scss css/main.css",
+		"test": "eslint js && stylelint scss/main.scss && stylelint scss/reset.scss",
+		"build:css": "node-sass --source-map=true --output-style=compressed scss/main.scss css/main.css && node-sass --source-map=true --output-style=compressed scss/reset.scss css/reset.css",
 		"build": "npm run build:css"
 	},
 	"repository": "murray55669/iron",
