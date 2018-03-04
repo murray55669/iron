@@ -4,7 +4,6 @@
 const SEND_RATE = 1000 / 60;
 const $BODY = $(`body`);
 
-
 class Ui {
 	constructor () {
 		this._overlays = [];
@@ -56,8 +55,6 @@ class Game {
 	play () {
 		const canvas = document.getElementById("viewport");
 		const $canvas = $(canvas);
-		const audio = document.getElementById("myaudio");
-		audio.loop = false;
 		const socket = io();
 		const input = {
 			up: false,
@@ -104,12 +101,14 @@ class Game {
 			name: this.username,
 			color: this.color
 		});
-		$canvas.click((evt) => {
+		$canvas.on("mousedown", (evt) => {
 			input.mouseClick = getCursorPosition($canvas, evt);
+		});
+		$canvas.on("mouseup", (evt) => {
+			input.mouseClick = null;
 		});
 		setInterval(function () {
 			socket.emit("player-input", input);
-			input.mouseClick = null;
 		}, SEND_RATE);
 
 		canvas.width = 800;
@@ -135,6 +134,7 @@ class Game {
 			// draw players
 			Object.keys(players).forEach(key => {
 				const player = players[key];
+				if (player.dead) return;
 				ctx.fillStyle = player.color;
 				ctx.beginPath();
 				ctx.arc(player.x, player.y, 10, 0, 2 * Math.PI);
@@ -150,7 +150,7 @@ class Game {
 				ctx.font = "12px serif";
 				ctx.fillText(player.name, player.x - 10, player.y + 25);
 			});
-			
+
 			// sh01s f17ed
 			console.log(shots);
 			Object.keys(shots).forEach(key => {
@@ -159,10 +159,16 @@ class Game {
 				ctx.beginPath();
 				ctx.arc(shot.point[0], shot.point[1], 2, 0, 2 * Math.PI);
 				ctx.fill();
-				
+
 				if (shot.nu) {
-					audio.currentTime = 0;
-					audio.play();
+					const sfx = document.createElement("audio");
+					sfx.src = "sound/auuugch.wav";
+					sfx.loop = false;
+					$BODY.append(sfx);
+					sfx.addEventListener("ended", () => {
+						sfx.parentNode.removeChild(sfx);
+					});
+					sfx.play();
 				}
 			});
 

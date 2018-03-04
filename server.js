@@ -18,6 +18,11 @@ const MIN_X = 0;
 const MAX_Y = 600;
 const MIN_Y = 0;
 
+const MIN_SHOT_INTV = 1000 / 3;
+
+const SPD_PLAYER = 5;
+const SPD_SHOT = 15;
+
 app.set("port", SERVER_PORT);
 app.use("/img", express.static(path.resolve(__dirname, "img")));
 app.use("/js", express.static(path.resolve(__dirname, "js")));
@@ -47,7 +52,9 @@ io.on("connection", (socket) => {
 			y: 300,
 			color: data.color,
 			name: data.name,
-			input: {}
+			input: {},
+			lastShot: 0,
+			dead: false
 		};
 	});
 	socket.on("player-input", (data) => {
@@ -60,43 +67,93 @@ io.on("connection", (socket) => {
 });
 
 setInterval(() => {
+	const now = Date.now();
+	// process player inputs
 	Object.values(players).forEach(p => {
+		// do movement
 		const vMove = [(p.input.right || 0) - (p.input.left || 0), (p.input.down || 0) - (p.input.up || 0)];
-		mat.vec2.scale(vMove, mat.vec2.normalize(vMove, vMove), 5);
+		mat.vec2.scale(vMove, mat.vec2.normalize(vMove, vMove), SPD_PLAYER);
 		p.x += vMove[0];
 		p.y += vMove[1];
 		if (p.x > MAX_X) p.x = MAX_X;
 		if (p.x < MIN_X) p.x = MIN_X;
-		if (p.y > MAX_Y) p.y = MAX_Y; 
+		if (p.y > MAX_Y) p.y = MAX_Y;
 		if (p.y < MIN_Y) p.y = MIN_Y;
-		
-		if (p.input.mouseClick) {
+
+		// fire shots
+		if (p.input.mouseClick && (now - p.lastShot) > MIN_SHOT_INTV) {
+			p.lastShot = now;
 			const vDir = [
 				p.input.mouseClick[0] - p.x,
 				p.input.mouseClick[1] - p.y
 			];
-			mat.vec2.scale(vDir, mat.vec2.normalize(vDir, vDir), 25);
+			const point = [p.x + vDir[0], p.y + vDir[1]];
+			mat.vec2.scale(vDir, mat.vec2.normalize(vDir, vDir), SPD_SHOT);
 			shots[shotIndex++] = {
-				point: [p.x, p.y],
+				point: point,
 				dir: vDir,
-				nu: true
+				nu: true,
+				bounces: 0
 			};
 		}
 	});
-	
+
+	// update shots
 	Object.keys(shots).forEach(id => {
 		const s = shots[id];
+		// check for player-shot collisions
+		Object.values(players).forEach(p => {
+			const basePos = s.point;
+			const endPos = [...basePos];
+			mat.vec2.add(endPos, basePos, s.dir);
+
+			if (lineInCircle(basePos[0], basePos[1], endPos[0], endPos[1], s.point[0], s.point[1], 10)) {
+				p.dead = true;
+			}
+		});
+
+		// move shots
 		mat.vec2.add(s.point, s.point, s.dir);
-		if (s.point.x > MAX_X || s.point.y > MAX_Y || s.point.x < MIN_X || s.point.y < MIN_Y) {
-			delete shots[id];
-			return;
-		} else {
-			s.nu = false;
+		const bX = s.point[0] > MAX_X || s.point[0] < MIN_X;
+		const bY = s.point[1] > MAX_Y || s.point[1] < MIN_Y;
+		if (bX || bY) {
+			if (s.bounces > 1) delete shots[id];
+			if (bX) {
+				s.dir[0] *= -1;
+			}
+			if (bY) {
+				s.dir[1] *= -1;
+			}
+			s.bounces++;
+			mat.vec2.add(s.point, s.point, s.dir);
 		}
 	});
 
+	// send data to clients
 	io.sockets.emit("state", {
 		players: players,
 		shots: shots
 	});
+
+	// cleanup
+	Object.keys(shots).forEach(id => {
+		shots[id].nu = false;
+	});
 }, TICK_RATE);
+
+function pointInCircle (x, y, cx, cy, radius) {
+	const distancesquared = (x - cx) * (x - cx) + (y - cy) * (y - cy);
+	return distancesquared <= radius * radius;
+}
+
+function lineInCircle (x1, y1, x2, y2, xC, yC, rad) {
+	x1 -= xC;
+	x2 -= xC;
+	y1 -= yC;
+	y2 -= yC;
+	const dx = x2 - x1;
+	const dy = y2 - y1;
+	const drSquared = (dx * dx) + (dy * dy);
+	const D = x1 * y2 - x2 * y1;
+	return rad * rad * drSquared > (D * D);
+}
