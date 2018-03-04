@@ -23,6 +23,8 @@ app.use("/img", express.static(path.resolve(__dirname, "img")));
 app.use("/js", express.static(path.resolve(__dirname, "js")));
 app.use("/lib", express.static(path.resolve(__dirname, "lib")));
 app.use("/css", express.static(path.resolve(__dirname, "css")));
+app.use("/sound", express.static(path.resolve(__dirname, "sound")));
+
 
 // Routing
 app.get("/", (request, response) => {
@@ -76,7 +78,8 @@ setInterval(() => {
 			mat.vec2.scale(vDir, mat.vec2.normalize(vDir, vDir), 25);
 			shots[shotIndex++] = {
 				point: [p.x, p.y],
-				dir: vDir
+				dir: vDir,
+				nu: true
 			};
 		}
 	});
@@ -84,9 +87,11 @@ setInterval(() => {
 	Object.keys(shots).forEach(id => {
 		const s = shots[id];
 		mat.vec2.add(s.point, s.point, s.dir);
-		if (s.x > MAX_X || s.y > MAX_Y || s.x < MIN_X || s.y < MIN_Y) {
+		if (s.point.x > MAX_X || s.point.y > MAX_Y || s.point.x < MIN_X || s.point.y < MIN_Y) {
 			delete shots[id];
 			return;
+		} else {
+			s.nu = false;
 		}
 	});
 

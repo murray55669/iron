@@ -56,6 +56,8 @@ class Game {
 	play () {
 		const canvas = document.getElementById("viewport");
 		const $canvas = $(canvas);
+		const audio = document.getElementById("myaudio");
+		audio.loop = false;
 		const socket = io();
 		const input = {
 			up: false,
@@ -149,12 +151,19 @@ class Game {
 				ctx.fillText(player.name, player.x - 10, player.y + 25);
 			});
 			
+			// sh01s f17ed
+			console.log(shots);
 			Object.keys(shots).forEach(key => {
 				const shot = shots[key];
 				ctx.fillStyle = "#ff0000";
 				ctx.beginPath();
 				ctx.arc(shot.point[0], shot.point[1], 2, 0, 2 * Math.PI);
 				ctx.fill();
+				
+				if (shot.nu) {
+					audio.currentTime = 0;
+					audio.play();
+				}
 			});
 
 			// draw FPS
