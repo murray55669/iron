@@ -13,6 +13,11 @@ const io = socketIO(server);
 const TICK_RATE = 1000 / 60;
 const SERVER_PORT = process.env.PORT || 1337;
 
+const MAX_X = 800;
+const MIN_X = 0;
+const MAX_Y = 600;
+const MIN_Y = 0;
+
 app.set("port", SERVER_PORT);
 app.use("/img", express.static(path.resolve(__dirname, "img")));
 app.use("/js", express.static(path.resolve(__dirname, "js")));
@@ -31,6 +36,8 @@ server.listen(SERVER_PORT, () => {
 
 // Add the WebSocket handlers
 const players = {};
+let shotIndex = 0;
+const shots = {};
 io.on("connection", (socket) => {
 	socket.on("player-new", (data) => {
 		players[socket.id] = {
@@ -56,7 +63,35 @@ setInterval(() => {
 		mat.vec2.scale(vMove, mat.vec2.normalize(vMove, vMove), 5);
 		p.x += vMove[0];
 		p.y += vMove[1];
+		if (p.x > MAX_X) p.x = MAX_X;
+		if (p.x < MIN_X) p.x = MIN_X;
+		if (p.y > MAX_Y) p.y = MAX_Y; 
+		if (p.y < MIN_Y) p.y = MIN_Y;
+		
+		if (p.input.mouseClick) {
+			const vDir = [
+				p.input.mouseClick[0] - p.x,
+				p.input.mouseClick[1] - p.y
+			];
+			mat.vec2.scale(vDir, mat.vec2.normalize(vDir, vDir), 25);
+			shots[shotIndex++] = {
+				point: [p.x, p.y],
+				dir: vDir
+			};
+		}
+	});
+	
+	Object.keys(shots).forEach(id => {
+		const s = shots[id];
+		mat.vec2.add(s.point, s.point, s.dir);
+		if (s.x > MAX_X || s.y > MAX_Y || s.x < MIN_X || s.y < MIN_Y) {
+			delete shots[id];
+			return;
+		}
 	});
 
-	io.sockets.emit("state", players);
+	io.sockets.emit("state", {
+		players: players,
+		shots: shots
+	});
 }, TICK_RATE);

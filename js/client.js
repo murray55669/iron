@@ -4,6 +4,7 @@
 const SEND_RATE = 1000 / 60;
 const $BODY = $(`body`);
 
+
 class Ui {
 	constructor () {
 		this._overlays = [];
@@ -53,8 +54,10 @@ class Game {
 	}
 
 	play () {
+		const canvas = document.getElementById("viewport");
+		const $canvas = $(canvas);
 		const socket = io();
-		const movement = {
+		const input = {
 			up: false,
 			down: false,
 			left: false,
@@ -64,16 +67,16 @@ class Game {
 		document.addEventListener("keydown", function (evt) {
 			switch (evt.keyCode) {
 				case 65: // A
-					movement.left = true;
+					input.left = true;
 					break;
 				case 87: // W
-					movement.up = true;
+					input.up = true;
 					break;
 				case 68: // D
-					movement.right = true;
+					input.right = true;
 					break;
 				case 83: // S
-					movement.down = true;
+					input.down = true;
 					break;
 			}
 		});
@@ -81,16 +84,16 @@ class Game {
 		document.addEventListener("keyup", function (evt) {
 			switch (evt.keyCode) {
 				case 65: // A
-					movement.left = false;
+					input.left = false;
 					break;
 				case 87: // W
-					movement.up = false;
+					input.up = false;
 					break;
 				case 68: // D
-					movement.right = false;
+					input.right = false;
 					break;
 				case 83: // S
-					movement.down = false;
+					input.down = false;
 					break;
 			}
 		});
@@ -99,18 +102,23 @@ class Game {
 			name: this.username,
 			color: this.color
 		});
+		$canvas.click((evt) => {
+			input.mouseClick = getCursorPosition($canvas, evt);
+		});
 		setInterval(function () {
-			socket.emit("player-input", movement);
+			socket.emit("player-input", input);
+			input.mouseClick = null;
 		}, SEND_RATE);
 
-		const canvas = document.getElementById("viewport");
 		canvas.width = 800;
 		canvas.height = 600;
 		const ctx = canvas.getContext("2d");
 		let players = {};
+		let shots = {};
 
-		socket.on("state", function (playersData) {
-			players = playersData;
+		socket.on("state", function (data) {
+			players = data.players;
+			shots = data.shots;
 		});
 
 		let then = 0;
@@ -134,10 +142,19 @@ class Game {
 				ctx.beginPath();
 				ctx.arc(player.x, player.y, 10, 0, 2 * Math.PI);
 				ctx.stroke();
+				ctx.closePath();
 
 				ctx.fillStyle = "black";
 				ctx.font = "12px serif";
 				ctx.fillText(player.name, player.x - 10, player.y + 25);
+			});
+			
+			Object.keys(shots).forEach(key => {
+				const shot = shots[key];
+				ctx.fillStyle = "#ff0000";
+				ctx.beginPath();
+				ctx.arc(shot.point[0], shot.point[1], 2, 0, 2 * Math.PI);
+				ctx.fill();
 			});
 
 			// draw FPS

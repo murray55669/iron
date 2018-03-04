@@ -16,7 +16,7 @@ const ctx = canvas.getContext("2d");
 let drawing = false;
 let points = [];
 $canvas.click((evt) => {
-	const cur = getCursorPosition(evt);
+	const cur = getCursorPosition($canvas, evt);
 	if (!drawing) {
 		drawing = true;
 	}
@@ -75,12 +75,4 @@ function draw (doFill) {
 function clear () {
 	ctx.closePath();
 	ctx.clearRect(0, 0, 800, 600);
-}
-
-function getCursorPosition (event) {
-	const canOffset = $canvas.offset();
-	const x = event.clientX + document.body.scrollLeft + document.documentElement.scrollLeft - Math.floor(canOffset.left);
-	const y = event.clientY + document.body.scrollTop + document.documentElement.scrollTop - Math.floor(canOffset.top) + 1;
-
-	return [x, y];
 }
