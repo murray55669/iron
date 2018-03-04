@@ -87,8 +87,8 @@ setInterval(() => {
 				p.input.mouseClick[0] - p.x,
 				p.input.mouseClick[1] - p.y
 			];
-			const point = [p.x + vDir[0], p.y + vDir[1]];
 			mat.vec2.scale(vDir, mat.vec2.normalize(vDir, vDir), SPD_SHOT);
+			const point = [p.x + vDir[0], p.y + vDir[1]];
 			shots[shotIndex++] = {
 				point: point,
 				dir: vDir,
@@ -106,8 +106,9 @@ setInterval(() => {
 			const basePos = s.point;
 			const endPos = [...basePos];
 			mat.vec2.add(endPos, basePos, s.dir);
+			const pPos = [p.x, p.y];
 
-			if (lineInCircle(basePos[0], basePos[1], endPos[0], endPos[1], s.point[0], s.point[1], 10)) {
+			if (lineInCirc(basePos, endPos, pPos, 10)) {
 				p.dead = true;
 			}
 		});
@@ -141,19 +142,16 @@ setInterval(() => {
 	});
 }, TICK_RATE);
 
-function pointInCircle (x, y, cx, cy, radius) {
-	const distancesquared = (x - cx) * (x - cx) + (y - cy) * (y - cy);
-	return distancesquared <= radius * radius;
-}
+// function pointInCircle (x, y, cx, cy, radius) {
+// 	const distancesquared = (x - cx) * (x - cx) + (y - cy) * (y - cy);
+// 	return distancesquared <= radius * radius;
+// }
 
-function lineInCircle (x1, y1, x2, y2, xC, yC, rad) {
-	x1 -= xC;
-	x2 -= xC;
-	y1 -= yC;
-	y2 -= yC;
-	const dx = x2 - x1;
-	const dy = y2 - y1;
-	const drSquared = (dx * dx) + (dy * dy);
-	const D = x1 * y2 - x2 * y1;
-	return rad * rad * drSquared > (D * D);
+// FIXME broken?
+function lineInCirc (p1, p2, pC, rad) {
+	const dx = (p2[0] - pC[0]) - (p1[0] - pC[0]);
+	const dy = (p2[1] - pC[1]) - (p1[1] - pC[1]);
+	const dr = Math.sqrt(dx * dx + dy * dy);
+	const D = (p1[0] - p2[1]) - (p2[0] - p1[1]);
+	return ((rad * rad * dr * dr) - (D * D)) >= 0;
 }
