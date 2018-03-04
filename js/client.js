@@ -182,7 +182,7 @@ class Game {
 
 				// TODO better handling for sound; this doesn't always play
 				if (shot.nu) {
-					self.sfx("shaq_0.mp3", 0.3);
+					self.sfx("shq_pap.mp3", 0.3);
 				}
 			});
 
