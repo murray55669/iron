@@ -6,6 +6,8 @@ const http = require("http");
 const path = require("path");
 const socketIO = require("socket.io");
 const mat = require("gl-matrix");
+const utils = require("./js/utils");
+
 const app = express();
 const server = http.Server(app);
 const io = socketIO(server);
@@ -21,7 +23,9 @@ const MIN_Y = 0;
 const MIN_SHOT_INTV = 1000 / 3;
 
 const SPD_PLAYER = 5;
-const SPD_SHOT = 15;
+const SPD_SHOT = 7;
+
+const SZ_PLAYER = 10;
 
 app.set("port", SERVER_PORT);
 app.use("/img", express.static(path.resolve(__dirname, "img")));
@@ -29,7 +33,6 @@ app.use("/js", express.static(path.resolve(__dirname, "js")));
 app.use("/lib", express.static(path.resolve(__dirname, "lib")));
 app.use("/css", express.static(path.resolve(__dirname, "css")));
 app.use("/sound", express.static(path.resolve(__dirname, "sound")));
-
 
 // Routing
 app.get("/", (request, response) => {
@@ -48,9 +51,11 @@ const shots = {};
 io.on("connection", (socket) => {
 	socket.on("player-new", (data) => {
 		players[socket.id] = {
+			id: socket.id,
 			x: 300,
 			y: 300,
 			color: data.color,
+			oppColor: utils.invertColor(data.color),
 			name: data.name,
 			input: {},
 			lastShot: 0,
@@ -70,6 +75,8 @@ setInterval(() => {
 	const now = Date.now();
 	// process player inputs
 	Object.values(players).forEach(p => {
+		if (p.dead) return; // p dead, bruh
+
 		// do movement
 		const vMove = [(p.input.right || 0) - (p.input.left || 0), (p.input.down || 0) - (p.input.up || 0)];
 		mat.vec2.scale(vMove, mat.vec2.normalize(vMove, vMove), SPD_PLAYER);
@@ -87,10 +94,15 @@ setInterval(() => {
 				p.input.mouseClick[0] - p.x,
 				p.input.mouseClick[1] - p.y
 			];
-			mat.vec2.scale(vDir, mat.vec2.normalize(vDir, vDir), SPD_SHOT);
-			const point = [p.x + vDir[0], p.y + vDir[1]];
+			mat.vec2.normalize(vDir, vDir);
+			// ensure the shot starts outside the player
+			const temp = [];
+			mat.vec2.scale(temp, vDir, SZ_PLAYER + 1);
+			const startPoint = [p.x, p.y];
+			mat.vec2.add(startPoint, startPoint, temp);
+			mat.vec2.scale(vDir, vDir, SPD_SHOT); // pre-scale the movement vector, instead of doing it every loop
 			shots[shotIndex++] = {
-				point: point,
+				point: startPoint,
 				dir: vDir,
 				nu: true,
 				bounces: 0
@@ -108,8 +120,9 @@ setInterval(() => {
 			mat.vec2.add(endPos, basePos, s.dir);
 			const pPos = [p.x, p.y];
 
-			if (lineInCirc(basePos, endPos, pPos, 10)) {
+			if (lineSegmentInCircle(basePos, endPos, pPos, SZ_PLAYER)) {
 				p.dead = true;
+				delete shots[id];
 			}
 		});
 
@@ -118,7 +131,10 @@ setInterval(() => {
 		const bX = s.point[0] > MAX_X || s.point[0] < MIN_X;
 		const bY = s.point[1] > MAX_Y || s.point[1] < MIN_Y;
 		if (bX || bY) {
-			if (s.bounces > 1) delete shots[id];
+			if (s.bounces > 1) {
+				delete shots[id];
+				return;
+			}
 			if (bX) {
 				s.dir[0] *= -1;
 			}
@@ -142,16 +158,51 @@ setInterval(() => {
 	});
 }, TICK_RATE);
 
-// function pointInCircle (x, y, cx, cy, radius) {
-// 	const distancesquared = (x - cx) * (x - cx) + (y - cy) * (y - cy);
-// 	return distancesquared <= radius * radius;
-// }
+function lineSegmentInCircle (p1, p2, pC, radC) {
+	// https://stackoverflow.com/a/1084899/5987433
+	const d = [];
+	mat.vec2.sub(d, p2, p1);
+	const f = [];
+	mat.vec2.sub(f, p1, pC);
 
-// FIXME broken?
-function lineInCirc (p1, p2, pC, rad) {
-	const dx = (p2[0] - pC[0]) - (p1[0] - pC[0]);
-	const dy = (p2[1] - pC[1]) - (p1[1] - pC[1]);
-	const dr = Math.sqrt(dx * dx + dy * dy);
-	const D = (p1[0] - p2[1]) - (p2[0] - p1[1]);
-	return ((rad * rad * dr * dr) - (D * D)) >= 0;
+	const a = mat.vec2.dot(d, d);
+	const b = 2 * mat.vec2.dot(f, d);
+	const c = mat.vec2.dot(f, f) - radC * radC;
+
+	let discriminant = b * b - 4 * a * c;
+	if (discriminant < 0) {
+		// no intersection
+		return false;
+	} else {
+		// ray didn't totally miss sphere, so there is a solution to the equation.
+		discriminant = Math.sqrt(discriminant);
+		// either solution may be on or off the ray so need to test both t1 is always the smaller value, because BOTH discriminant and a are nonnegative.
+		const t1 = (-b - discriminant) / (2 * a);
+		const t2 = (-b + discriminant) / (2 * a);
+
+		// 4x HIT cases:
+		//          -o->             --|-->  |            |  --|->            | -> |
+		// Impale(t1 hit,t2 hit), Poke(t1 hit,t2>1), ExitWound(t1<0, t2 hit), CompletelyInside(t1<0, t2>1)
+
+		// 2x HIT cases:
+		//       ->  o                     o ->
+		// FallShort (t1>1,t2>1), Past (t1<0,t2<0)
+
+		if (t1 >= 0 && t1 <= 1) {
+			// t1 is the intersection, and it's closer than t2 (since t1 uses -b - discriminant)
+			// Impale, Poke
+			return true;
+		}
+		// here t1 didn't intersect so we are either started inside the sphere or completely past it
+		if (t2 >= 0 && t2 <= 1) {
+			// ExitWound
+			return true;
+		}
+		if (t1 < 0 && t2 > 1) {
+			// CompletelyInside
+			return true;
+		}
+		// no intersection: FallShort, Past
+		return false;
+	}
 }

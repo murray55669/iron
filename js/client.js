@@ -50,9 +50,13 @@ class Game {
 	constructor (username, color) {
 		this.username = username;
 		this.color = color;
+
+		this.dead = false;
 	}
 
 	play () {
+		const self = this;
+
 		const canvas = document.getElementById("viewport");
 		const $canvas = $(canvas);
 		const socket = io();
@@ -134,13 +138,12 @@ class Game {
 			// draw players
 			Object.keys(players).forEach(key => {
 				const player = players[key];
-				if (player.dead) return;
 				ctx.fillStyle = player.color;
 				ctx.beginPath();
 				ctx.arc(player.x, player.y, 10, 0, 2 * Math.PI);
 				ctx.fill();
 
-				ctx.fillStyle = "black";
+				ctx.strokeStyle = player.oppColor;
 				ctx.beginPath();
 				ctx.arc(player.x, player.y, 10, 0, 2 * Math.PI);
 				ctx.stroke();
@@ -149,10 +152,27 @@ class Game {
 				ctx.fillStyle = "black";
 				ctx.font = "12px serif";
 				ctx.fillText(player.name, player.x - 10, player.y + 25);
+
+				if (player.dead) {
+					ctx.strokeStyle = player.oppColor;
+					ctx.beginPath();
+					ctx.moveTo(player.x - 10, player.y - 10);
+					ctx.lineTo(player.x + 10, player.y + 10);
+					ctx.moveTo(player.x - 10, player.y + 10);
+					ctx.lineTo(player.x + 10, player.y - 10);
+					ctx.stroke();
+					ctx.closePath();
+
+					if (player.id === socket.id) {
+						if (!self.dead) {
+							self.dead = true;
+							self.sfx("cantwake.wav", 1);
+						}
+					}
+				}
 			});
 
-			// sh01s f17ed
-			console.log(shots);
+			// fire shots
 			Object.keys(shots).forEach(key => {
 				const shot = shots[key];
 				ctx.fillStyle = "#ff0000";
@@ -160,17 +180,28 @@ class Game {
 				ctx.arc(shot.point[0], shot.point[1], 2, 0, 2 * Math.PI);
 				ctx.fill();
 
+				// TODO better handling for sound; this doesn't always play
 				if (shot.nu) {
-					const sfx = document.createElement("audio");
-					sfx.src = "sound/auuugch.wav";
-					sfx.loop = false;
-					$BODY.append(sfx);
-					sfx.addEventListener("ended", () => {
-						sfx.parentNode.removeChild(sfx);
-					});
-					sfx.play();
+					self.sfx("auuugch.wav", 0.3);
 				}
 			});
+
+			// draw death overlay
+			if (self.dead) {
+				// red overlay
+				ctx.fillStyle = "#ff000099";
+				ctx.beginPath();
+				ctx.lineTo(0, 0);
+				ctx.lineTo(800, 0);
+				ctx.lineTo(800, 600);
+				ctx.lineTo(0, 600);
+				ctx.fill();
+
+				// dead text
+				ctx.fillStyle = "black";
+				ctx.font = "52px serif";
+				ctx.fillText(`W A S T E D`, 260, 326);
+			}
 
 			// draw FPS
 			ctx.fillStyle = "black";
@@ -183,6 +214,18 @@ class Game {
 			requestAnimationFrame(tick);
 		}
 		requestAnimationFrame(tick);
+	}
+
+	sfx (name, vol) {
+		const audio = document.createElement("audio");
+		audio.volume = vol;
+		audio.src = `sound/${name}`;
+		audio.loop = false;
+		$BODY.append(audio);
+		audio.addEventListener("ended", () => {
+			audio.parentNode.removeChild(audio);
+		});
+		audio.play();
 	}
 }
 
