@@ -232,7 +232,7 @@ class Game {
 				self.ctx.fill();
 
 				// TODO better handling for sound; this doesn't always play
-				if (shot.nu) {
+				if (shot.isNew) {
 					self._sfx("shq_pap.mp3", 0.3);
 				}
 			});
