@@ -36,59 +36,63 @@ class GameServer {
 	}
 
 	_setup (self) {
+		function doSetupRouting () {
+			app.use("/img", express.static(path.resolve(__dirname, "img")));
+			app.use("/js", express.static(path.resolve(__dirname, "js")));
+			app.use("/lib", express.static(path.resolve(__dirname, "lib")));
+			app.use("/css", express.static(path.resolve(__dirname, "css")));
+			app.use("/sound", express.static(path.resolve(__dirname, "sound")));
+
+			app.get("/", (request, response) => {
+				response.sendFile(path.join(__dirname, "index.html"));
+			});
+		}
+
+		function doStartServer () {
+			server.listen(SERVER_PORT, () => {
+				console.log(`Starting server on port ${SERVER_PORT}`);
+			});
+		}
+
+		function doAddSocketHandlers () {
+			self.players = {};
+			self.shotIndex = 0;
+			self.shots = {};
+			io.on("connection", (socket) => {
+				socket.on("player-new", (data) => {
+					self.players[socket.id] = {
+						id: socket.id,
+						x: 300,
+						y: 300,
+						color: data.color,
+						oppColor: utils.invertColor(data.color),
+						name: data.name,
+						input: {},
+						lastShot: 0,
+						dead: false
+					};
+				});
+
+				socket.on("player-input", (data) => {
+					const player = self.players[socket.id] || {};
+					player.input = data;
+				});
+
+				socket.on("disconnect", () => {
+					delete self.players[socket.id];
+				});
+			});
+		}
+
 		app.set("port", SERVER_PORT);
-		app.use("/img", express.static(path.resolve(__dirname, "img")));
-		app.use("/js", express.static(path.resolve(__dirname, "js")));
-		app.use("/lib", express.static(path.resolve(__dirname, "lib")));
-		app.use("/css", express.static(path.resolve(__dirname, "css")));
-		app.use("/sound", express.static(path.resolve(__dirname, "sound")));
-
-		// Routing
-		app.get("/", (request, response) => {
-			response.sendFile(path.join(__dirname, "index.html"));
-		});
-
-		// Starts the server.
-		server.listen(SERVER_PORT, () => {
-			console.log(`Starting server on port ${SERVER_PORT}`);
-		});
-
-		// Add the WebSocket handlers
-		self.players = {};
-		self.shotIndex = 0;
-		self.shots = {};
-		io.on("connection", (socket) => {
-			socket.on("player-new", (data) => {
-				self.players[socket.id] = {
-					id: socket.id,
-					x: 300,
-					y: 300,
-					color: data.color,
-					oppColor: utils.invertColor(data.color),
-					name: data.name,
-					input: {},
-					lastShot: 0,
-					dead: false
-				};
-			});
-			socket.on("player-input", (data) => {
-				const player = self.players[socket.id] || {};
-				player.input = data;
-			});
-			socket.on("disconnect", () => {
-				delete self.players[socket.id];
-			});
-		});
+		doSetupRouting();
+		doStartServer();
+		doAddSocketHandlers();
 	}
 
 	_runLoop (self) {
-		setInterval(() => {
-			const now = Date.now();
-			// process player inputs
-			Object.values(self.players).forEach(p => {
-				if (p.dead) return; // p dead, bruh
-
-				// do movement
+		function doProcessPlayerInput (now) {
+			function doMovePlayer (p) {
 				const vMove = [(p.input.right || 0) - (p.input.left || 0), (p.input.down || 0) - (p.input.up || 0)];
 				mat.vec2.scale(vMove, mat.vec2.normalize(vMove, vMove), SPD_PLAYER);
 				p.x += vMove[0];
@@ -97,8 +101,9 @@ class GameServer {
 				if (p.x < MIN_X) p.x = MIN_X;
 				if (p.y > MAX_Y) p.y = MAX_Y;
 				if (p.y < MIN_Y) p.y = MIN_Y;
+			}
 
-				// fire shots
+			function doFireShot (p) {
 				if (p.input.mouseClick && (now - p.lastShot) > MIN_SHOT_INTV) {
 					p.lastShot = now;
 					const vDir = [
@@ -119,11 +124,17 @@ class GameServer {
 						bounces: 0
 					};
 				}
-			});
+			}
 
-			// update shots
-			Object.keys(self.shots).forEach(id => {
-				const s = self.shots[id];
+			Object.values(self.players).forEach(p => {
+				if (p.dead) return; // p dead, bruh
+				doMovePlayer(p);
+				doFireShot(p);
+			});
+		}
+
+		function doUpdateShots () {
+			function doCheckCollision (id, s) {
 				// check for player-shot collisions
 				Object.values(self.players).forEach(p => {
 					const basePos = s.point;
@@ -136,8 +147,9 @@ class GameServer {
 						delete self.shots[id];
 					}
 				});
+			}
 
-				// move shots
+			function doMoveShot (id, s) {
 				mat.vec2.add(s.point, s.point, s.dir);
 				const bX = s.point[0] > MAX_X || s.point[0] < MIN_X;
 				const bY = s.point[1] > MAX_Y || s.point[1] < MIN_Y;
@@ -155,18 +167,34 @@ class GameServer {
 					s.bounces++;
 					mat.vec2.add(s.point, s.point, s.dir);
 				}
-			});
+			}
 
-			// send data to clients
+			Object.keys(self.shots).forEach(id => {
+				const s = self.shots[id];
+				doCheckCollision(id, s);
+				doMoveShot(id, s);
+			});
+		}
+
+		function doSendDataToClients () {
 			io.sockets.emit("state", {
 				players: self.players,
 				shots: self.shots
 			});
+		}
 
-			// cleanup
+		function doTickEndCleanup () {
 			Object.keys(self.shots).forEach(id => {
 				self.shots[id].isNew = false;
 			});
+		}
+
+		setInterval(() => {
+			const now = Date.now();
+			doProcessPlayerInput(now);
+			doUpdateShots();
+			doSendDataToClients();
+			doTickEndCleanup();
 		}, TICK_RATE);
 	}
 }
