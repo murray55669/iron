@@ -2,6 +2,7 @@
 "use strict";
 
 const SEND_RATE = 1000 / 60;
+const $DOCUMENT = $(document);
 const $BODY = $(`body`);
 
 class Ui {
@@ -9,6 +10,10 @@ class Ui {
 		this._overlays = [];
 	}
 
+	/**
+	 * Display the login screen
+	 * @returns {Promise<any>} object containing player name and colour
+	 */
 	login () {
 		const self = this;
 		return new Promise((resolve) => {
@@ -28,6 +33,10 @@ class Ui {
 		});
 	}
 
+	/**
+	 * Display an error message
+	 * @param e error message
+	 */
 	error (e) {
 		const self = this;
 		this._fullscreenOverlay(self, `<p>listen here u lil shit: ${e.message || e}</p>`, $(`<button>Yeah?</button>`).click(() => {
@@ -35,11 +44,22 @@ class Ui {
 		}))
 	}
 
+	/**
+	 * Render a fullscreen background, onto which the elements are placed and centred
+	 * @param self this Ui instance
+	 * @param eles elements to place in the overlay
+	 * @private
+	 */
 	_fullscreenOverlay (self, ...eles) {
 		const $over = $(`<div class="overlay-wrp bg1">`).append($(`<div class="overlay-wrp-inn bg2">`).append(eles)).appendTo($BODY);
 		self._overlays.push($over);
 	}
 
+	/**
+	 * Close the most recently opened overlay
+	 * @param self this Ui instance
+	 * @private
+	 */
 	static _closeOverlay (self) {
 		const $close = self._overlays.pop();
 		if ($close) $close.remove();
@@ -51,164 +71,195 @@ class Game {
 		this.username = username;
 		this.color = color;
 
+		// client state
+		this.canvas = null;
+		this.$canvas = null;
+		this.socket = null;
+		this.input = {};
+
+		// game state
 		this.dead = false;
+		this.players = {};
+		this.shots = {};
 	}
 
+	/**
+	 * [[ 14 :: Start the game already! ]]
+	 */
 	play () {
 		const self = this;
 
-		const canvas = document.getElementById("viewport");
-		const $canvas = $(canvas);
-		const socket = io();
-		const input = {
+		this._setup(self);
+		this._runLoop(self);
+	}
+
+	/**
+	 * Initialise client state and networking, add event handlers
+	 * @param self this Game
+	 * @private
+	 */
+	_setup (self) {
+		self.canvas = document.getElementById("viewport");
+		self.canvas.width = 800;
+		self.canvas.height = 600;
+		self.ctx = self.canvas.getContext("2d");
+		self.$canvas = $(self.canvas);
+		self.socket = io();
+		self.input = {
 			up: false,
 			down: false,
 			left: false,
 			right: false
 		};
 
-		document.addEventListener("keydown", function (evt) {
+		$DOCUMENT.on("keydown", (evt) => {
 			switch (evt.keyCode) {
 				case 65: // A
-					input.left = true;
+					self.input.left = true;
 					break;
 				case 87: // W
-					input.up = true;
+					self.input.up = true;
 					break;
 				case 68: // D
-					input.right = true;
+					self.input.right = true;
 					break;
 				case 83: // S
-					input.down = true;
+					self.input.down = true;
 					break;
 			}
 		});
 
-		document.addEventListener("keyup", function (evt) {
+		$DOCUMENT.on("keyup", (evt) => {
 			switch (evt.keyCode) {
 				case 65: // A
-					input.left = false;
+					self.input.left = false;
 					break;
 				case 87: // W
-					input.up = false;
+					self.input.up = false;
 					break;
 				case 68: // D
-					input.right = false;
+					self.input.right = false;
 					break;
 				case 83: // S
-					input.down = false;
+					self.input.down = false;
 					break;
 			}
 		});
 
-		socket.emit("player-new", {
-			name: this.username,
-			color: this.color
+		self.$canvas.on("mousedown", (evt) => {
+			self.input.mouseClick = getCursorPosition(self.$canvas, evt);
 		});
-		$canvas.on("mousedown", (evt) => {
-			input.mouseClick = getCursorPosition($canvas, evt);
+		self.$canvas.on("mouseup", () => {
+			self.input.mouseClick = null;
 		});
-		$canvas.on("mouseup", (evt) => {
-			input.mouseClick = null;
+
+		// join the game
+		self.socket.emit("player-new", {
+			name: self.username,
+			color: self.color
 		});
-		setInterval(function () {
-			socket.emit("player-input", input);
+
+		// data received handler
+		self.socket.on("state", (data) => {
+			self.players = data.players;
+			self.shots = data.shots;
+		});
+
+		// data sending loop
+		setInterval(() => {
+			self.socket.emit("player-input", self.input);
 		}, SEND_RATE);
+	}
 
-		canvas.width = 800;
-		canvas.height = 600;
-		const ctx = canvas.getContext("2d");
-		let players = {};
-		let shots = {};
-
-		socket.on("state", function (data) {
-			players = data.players;
-			shots = data.shots;
-		});
-
+	/**
+	 * Run the game rendering loop
+	 * @param self this Game
+	 * @private
+	 */
+	_runLoop (self) {
 		let then = 0;
 		let fpsSmooth = 0.99; // larger = more smoothing
-		let fps = 60;
+		let fps = 60; // assume 60 for the first frame, adjust frame-by-frame thereafter
 		function tick (now) {
 			const deltaTime = now - then;
 			then = now;
 
-			ctx.clearRect(0, 0, 800, 600);
+			self.ctx.clearRect(0, 0, 800, 600);
 
 			// draw players
-			Object.keys(players).forEach(key => {
-				const player = players[key];
-				ctx.fillStyle = player.color;
-				ctx.beginPath();
-				ctx.arc(player.x, player.y, 10, 0, 2 * Math.PI);
-				ctx.fill();
+			Object.keys(self.players).forEach(key => {
+				const player = self.players[key];
+				self.ctx.fillStyle = player.color;
+				self.ctx.beginPath();
+				self.ctx.arc(player.x, player.y, 10, 0, 2 * Math.PI);
+				self.ctx.fill();
 
-				ctx.strokeStyle = player.oppColor;
-				ctx.beginPath();
-				ctx.arc(player.x, player.y, 10, 0, 2 * Math.PI);
-				ctx.stroke();
-				ctx.closePath();
+				self.ctx.strokeStyle = player.oppColor;
+				self.ctx.beginPath();
+				self.ctx.arc(player.x, player.y, 10, 0, 2 * Math.PI);
+				self.ctx.stroke();
+				self.ctx.closePath();
 
-				ctx.fillStyle = "black";
-				ctx.font = "12px serif";
-				ctx.fillText(player.name, player.x - 10, player.y + 25);
+				self.ctx.fillStyle = "black";
+				self.ctx.font = "12px serif";
+				self.ctx.fillText(player.name, player.x - 10, player.y + 25);
 
 				if (player.dead) {
-					ctx.strokeStyle = player.oppColor;
-					ctx.beginPath();
-					ctx.moveTo(player.x - 10, player.y - 10);
-					ctx.lineTo(player.x + 10, player.y + 10);
-					ctx.moveTo(player.x - 10, player.y + 10);
-					ctx.lineTo(player.x + 10, player.y - 10);
-					ctx.stroke();
-					ctx.closePath();
+					self.ctx.strokeStyle = player.oppColor;
+					self.ctx.beginPath();
+					self.ctx.moveTo(player.x - 10, player.y - 10);
+					self.ctx.lineTo(player.x + 10, player.y + 10);
+					self.ctx.moveTo(player.x - 10, player.y + 10);
+					self.ctx.lineTo(player.x + 10, player.y - 10);
+					self.ctx.stroke();
+					self.ctx.closePath();
 
-					if (player.id === socket.id) {
+					if (player.id === self.socket.id) {
 						if (!self.dead) {
 							self.dead = true;
-							self.sfx("cantwake.wav", 1);
+							self._sfx("cantwake.wav", 1);
 						}
 					}
 				}
 			});
 
 			// fire shots
-			Object.keys(shots).forEach(key => {
-				const shot = shots[key];
-				ctx.fillStyle = "#ff0000";
-				ctx.beginPath();
-				ctx.arc(shot.point[0], shot.point[1], 2, 0, 2 * Math.PI);
-				ctx.fill();
+			Object.keys(self.shots).forEach(key => {
+				const shot = self.shots[key];
+				self.ctx.fillStyle = "#ff0000";
+				self.ctx.beginPath();
+				self.ctx.arc(shot.point[0], shot.point[1], 2, 0, 2 * Math.PI);
+				self.ctx.fill();
 
 				// TODO better handling for sound; this doesn't always play
 				if (shot.nu) {
-					self.sfx("shq_pap.mp3", 0.3);
+					self._sfx("shq_pap.mp3", 0.3);
 				}
 			});
 
 			// draw death overlay
 			if (self.dead) {
 				// red overlay
-				ctx.fillStyle = "#ff000099";
-				ctx.beginPath();
-				ctx.lineTo(0, 0);
-				ctx.lineTo(800, 0);
-				ctx.lineTo(800, 600);
-				ctx.lineTo(0, 600);
-				ctx.fill();
+				self.ctx.fillStyle = "#ff000099";
+				self.ctx.beginPath();
+				self.ctx.lineTo(0, 0);
+				self.ctx.lineTo(800, 0);
+				self.ctx.lineTo(800, 600);
+				self.ctx.lineTo(0, 600);
+				self.ctx.fill();
 
 				// dead text
-				ctx.fillStyle = "black";
-				ctx.font = "52px serif";
-				ctx.fillText(`W A S T E D`, 260, 326);
+				self.ctx.fillStyle = "black";
+				self.ctx.font = "52px serif";
+				self.ctx.fillText(`W A S T E D`, 260, 326);
 			}
 
 			// draw FPS
-			ctx.fillStyle = "black";
-			ctx.font = "12px serif";
+			self.ctx.fillStyle = "black";
+			self.ctx.font = "12px serif";
 			let curFps = 1000 / deltaTime;
 			curFps = (curFps * fpsSmooth) + (fps * (1 - fpsSmooth));
-			ctx.fillText(`FPS: ${curFps.toFixed(2)}`, 0, 12);
+			self.ctx.fillText(`FPS: ${curFps.toFixed(2)}`, 0, 12);
 			fps = curFps;
 
 			requestAnimationFrame(tick);
@@ -216,7 +267,13 @@ class Game {
 		requestAnimationFrame(tick);
 	}
 
-	sfx (name, vol) {
+	/**
+	 * Play a sound
+	 * @param name the name of the sound (filename in /sound/)
+	 * @param vol volume between 0.00 and 1.00
+	 * @private
+	 */
+	_sfx (name, vol) {
 		const audio = document.createElement("audio");
 		audio.volume = vol;
 		audio.src = `sound/${name}`;
