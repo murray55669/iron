@@ -100,8 +100,8 @@ class Game {
 	 */
 	_setup (self) {
 		self.canvas = document.getElementById("viewport");
-		self.canvas.width = 800;
-		self.canvas.height = 600;
+		self.canvas.width = C.MAX_X;
+		self.canvas.height = C.MAX_Y;
 		self.ctx = self.canvas.getContext("2d");
 		self.$canvas = $(self.canvas);
 		self.socket = io();
@@ -147,7 +147,7 @@ class Game {
 		});
 
 		self.$canvas.on("mousedown", (evt) => {
-			self.input.mouseClick = getCursorPosition(self.$canvas, evt);
+			self.input.mouseClick = util.getCursorPosition(self.$canvas, evt);
 		});
 		self.$canvas.on("mouseup", () => {
 			self.input.mouseClick = null;
@@ -184,19 +184,19 @@ class Game {
 			const deltaTime = now - then;
 			then = now;
 
-			self.ctx.clearRect(0, 0, 800, 600);
+			self.ctx.clearRect(0, 0, C.MAX_X, C.MAX_Y);
 
 			// draw players
 			Object.keys(self.players).forEach(key => {
 				const player = self.players[key];
 				self.ctx.fillStyle = player.color;
 				self.ctx.beginPath();
-				self.ctx.arc(player.x, player.y, 10, 0, 2 * Math.PI);
+				self.ctx.arc(player.x, player.y, C.SZ_PLAYER, 0, 2 * Math.PI);
 				self.ctx.fill();
 
 				self.ctx.strokeStyle = player.oppColor;
 				self.ctx.beginPath();
-				self.ctx.arc(player.x, player.y, 10, 0, 2 * Math.PI);
+				self.ctx.arc(player.x, player.y, C.SZ_PLAYER, 0, 2 * Math.PI);
 				self.ctx.stroke();
 				self.ctx.closePath();
 
@@ -207,10 +207,10 @@ class Game {
 				if (player.dead) {
 					self.ctx.strokeStyle = player.oppColor;
 					self.ctx.beginPath();
-					self.ctx.moveTo(player.x - 10, player.y - 10);
-					self.ctx.lineTo(player.x + 10, player.y + 10);
-					self.ctx.moveTo(player.x - 10, player.y + 10);
-					self.ctx.lineTo(player.x + 10, player.y - 10);
+					self.ctx.moveTo(player.x - C.SZ_PLAYER, player.y - C.SZ_PLAYER);
+					self.ctx.lineTo(player.x + C.SZ_PLAYER, player.y + C.SZ_PLAYER);
+					self.ctx.moveTo(player.x - C.SZ_PLAYER, player.y + C.SZ_PLAYER);
+					self.ctx.lineTo(player.x + C.SZ_PLAYER, player.y - C.SZ_PLAYER);
 					self.ctx.stroke();
 					self.ctx.closePath();
 
@@ -243,9 +243,9 @@ class Game {
 				self.ctx.fillStyle = "#ff000099";
 				self.ctx.beginPath();
 				self.ctx.lineTo(0, 0);
-				self.ctx.lineTo(800, 0);
-				self.ctx.lineTo(800, 600);
-				self.ctx.lineTo(0, 600);
+				self.ctx.lineTo(C.MAX_X, 0);
+				self.ctx.lineTo(C.MAX_X, C.MAX_Y);
+				self.ctx.lineTo(0, C.MAX_Y);
 				self.ctx.fill();
 
 				// dead text

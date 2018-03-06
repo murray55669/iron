@@ -6,7 +6,8 @@ const http = require("http");
 const path = require("path");
 const socketIO = require("socket.io");
 const mat = require("gl-matrix");
-const utils = require("./js/utils");
+const util = require("./js/util");
+const C = require("./js/const");
 
 const app = express();
 const server = http.Server(app);
@@ -15,17 +16,10 @@ const io = socketIO(server);
 const TICK_RATE = 1000 / 60;
 const SERVER_PORT = process.env.PORT || 1337;
 
-const MAX_X = 800;
-const MIN_X = 0;
-const MAX_Y = 600;
-const MIN_Y = 0;
-
 const MIN_SHOT_INTV = 1000 / 3;
 
 const SPD_PLAYER = 5;
 const SPD_SHOT = 7;
-
-const SZ_PLAYER = 10;
 
 class GameServer {
 	start () {
@@ -65,7 +59,7 @@ class GameServer {
 						x: 300,
 						y: 300,
 						color: data.color,
-						oppColor: utils.invertColor(data.color),
+						oppColor: util.invertColor(data.color),
 						name: data.name,
 						input: {},
 						lastShot: 0,
@@ -97,10 +91,10 @@ class GameServer {
 				mat.vec2.scale(vMove, mat.vec2.normalize(vMove, vMove), SPD_PLAYER);
 				p.x += vMove[0];
 				p.y += vMove[1];
-				if (p.x > MAX_X) p.x = MAX_X;
-				if (p.x < MIN_X) p.x = MIN_X;
-				if (p.y > MAX_Y) p.y = MAX_Y;
-				if (p.y < MIN_Y) p.y = MIN_Y;
+				if (p.x > C.MAX_X) p.x = C.MAX_X;
+				if (p.x < C.MIN_X) p.x = C.MIN_X;
+				if (p.y > C.MAX_Y) p.y = C.MAX_Y;
+				if (p.y < C.MIN_Y) p.y = C.MIN_Y;
 			}
 
 			function doFireShot (p) {
@@ -113,7 +107,7 @@ class GameServer {
 					mat.vec2.normalize(vDir, vDir);
 					// ensure the shot starts outside the player
 					const temp = [];
-					mat.vec2.scale(temp, vDir, SZ_PLAYER + 1);
+					mat.vec2.scale(temp, vDir, C.SZ_PLAYER + 1);
 					const startPoint = [p.x, p.y];
 					mat.vec2.add(startPoint, startPoint, temp);
 					mat.vec2.scale(vDir, vDir, SPD_SHOT); // pre-scale the movement vector, instead of doing it every loop
@@ -142,7 +136,7 @@ class GameServer {
 					mat.vec2.add(endPos, basePos, s.dir);
 					const pPos = [p.x, p.y];
 
-					if (lineSegmentInCircle(basePos, endPos, pPos, SZ_PLAYER)) {
+					if (lineSegmentInCircle(basePos, endPos, pPos, C.SZ_PLAYER)) {
 						p.dead = true;
 						delete self.shots[id];
 					}
@@ -151,8 +145,8 @@ class GameServer {
 
 			function doMoveShot (id, s) {
 				mat.vec2.add(s.point, s.point, s.dir);
-				const bX = s.point[0] > MAX_X || s.point[0] < MIN_X;
-				const bY = s.point[1] > MAX_Y || s.point[1] < MIN_Y;
+				const bX = s.point[0] > C.MAX_X || s.point[0] < C.MIN_X;
+				const bY = s.point[1] > C.MAX_Y || s.point[1] < C.MIN_Y;
 				if (bX || bY) {
 					if (s.bounces > 1) {
 						delete self.shots[id];

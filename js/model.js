@@ -16,7 +16,7 @@ const ctx = canvas.getContext("2d");
 let drawing = false;
 let points = [];
 $canvas.click((evt) => {
-	const cur = getCursorPosition($canvas, evt);
+	const cur = util.getCursorPosition($canvas, evt);
 	if (!drawing) {
 		drawing = true;
 	}
