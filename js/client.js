@@ -20,7 +20,7 @@ class Ui {
 			const $txtIntro = $(`<p>New phone, who dis?</p>`);
 			const $wrpIpts = $(`<div/>`);
 			const $iptName = $(`<input placeholder="sweet nickname">`).appendTo($wrpIpts);
-			const $iptColor = $(`<input type="color">`).appendTo($wrpIpts);
+			const $iptColor = $(`<input type="color" value="#888888">`).appendTo($wrpIpts);
 			const $btnGo = $(`<button>Enter</button>`).click(() => {
 				const n = $iptName.val();
 				const c = $iptColor.val();
