@@ -163,6 +163,11 @@ class Game {
 		self.$canvas.on("mousedown", (evt) => {
 			self.input.mouseClick = util.getCursorPosition(self.$canvas, evt);
 		});
+		self.$canvas.on("mousemove", (evt) => {
+			if (self.input.mouseClick) {
+				self.input.mouseClick = util.getCursorPosition(self.$canvas, evt);
+			}
+		});
 		self.$canvas.on("mouseup", () => {
 			self.input.mouseClick = null;
 		});

@@ -176,8 +176,18 @@ class GameServer {
 
 					if (lineSegmentInCircle(basePos, endPos, pPos, C.SZ_PLAYER)) {
 						if (p.shield) {
+							const hitPoint = findIntersect(pPos, C.SZ_PLAYER, basePos);
+							const scaledNormal = [];
+							mat.vec2.sub(scaledNormal, hitPoint, pPos);
+							mat.vec2.normalize(scaledNormal, scaledNormal);
+							// reflected vector = d - 2(d.n)*n
+							const refDir = [];
+							const scale = 2 * (mat.vec2.dot(s.dir, scaledNormal));
+							mat.vec2.scale(scaledNormal, scaledNormal, scale);
+							mat.vec2.sub(refDir, s.dir, scaledNormal);
+
 							// rebound the shot
-							mat.vec2.scale(s.dir, s.dir, -1);
+							s.dir = refDir;
 						} else {
 							p.dead = true;
 							p.lastDead = now;
@@ -204,7 +214,7 @@ class GameServer {
 					if (bY) {
 						s.dir[1] *= -1;
 					}
-					s.bounces--;
+					// s.bounces--;
 					mat.vec2.add(s.point, s.point, s.dir);
 				}
 			}
@@ -226,7 +236,7 @@ class GameServer {
 		function doTickEndCleanup (now) {
 			Object.values(self.players).forEach(p => {
 				if (p.lastSpawn < (now - TM_SPAWN_PROT)) {
-					p.shield = false;
+					// p.shield = false;
 				}
 			});
 
@@ -250,6 +260,26 @@ const gameServer = new GameServer();
 gameServer.start();
 
 // QUICK MAFS TODO refactor this?
+/**
+ * Finds the intersection between a circles border
+ * and a line from the origin to the otherLineEndPoint.
+ * @param  {Array} origin            - center of the circle and start of the line
+ * @param  {number} radius            - radius of the circle
+ * @param  {Array} otherLineEndPoint - end of the line
+ * @return {Array}                   - point of the intersection
+ */
+function findIntersect (origin, radius, otherLineEndPoint) {
+	const v = [];
+	mat.vec2.sub(v, otherLineEndPoint, origin);
+
+	const lineLength = mat.vec2.length(v);
+	if (lineLength === 0) throw new Error("Length has to be positive");
+	mat.vec2.normalize(v, v);
+	mat.vec2.scale(v, v, radius);
+	const out = [];
+	mat.vec2.add(out, origin, v);
+	return out;
+}
 function lineSegmentInCircle (p1, p2, pC, radC) {
 	// https://stackoverflow.com/a/1084899/5987433
 	const d = [];
