@@ -122,6 +122,7 @@ class GameServer {
 
 			function doFireShot (p) {
 				if (p.input.mouseClick && (now - p.lastShot) > MIN_SHOT_INTV) {
+					if (self.shots.length) return; // FIXME test code
 					p.lastShot = now;
 					const vDir = [
 						p.input.mouseClick[0] - p.x,
@@ -214,7 +215,7 @@ class GameServer {
 					if (bY) {
 						s.dir[1] *= -1;
 					}
-					// s.bounces--;
+					// s.bounces--; // FIXME test code; restore
 					mat.vec2.add(s.point, s.point, s.dir);
 				}
 			}
@@ -236,7 +237,7 @@ class GameServer {
 		function doTickEndCleanup (now) {
 			Object.values(self.players).forEach(p => {
 				if (p.lastSpawn < (now - TM_SPAWN_PROT)) {
-					// p.shield = false;
+					// p.shield = false; // FIXME test code; restore
 				}
 			});
 

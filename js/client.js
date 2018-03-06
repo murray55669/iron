@@ -244,13 +244,28 @@ class Game {
 				}
 			});
 
-			// fire shots
+			// draw shots
 			Object.keys(self.shots).forEach(key => {
 				const shot = self.shots[key];
 				self.ctx.fillStyle = "#ff0000";
 				self.ctx.beginPath();
 				self.ctx.arc(shot.point[0], shot.point[1], 2, 0, 2 * Math.PI);
 				self.ctx.fill();
+
+				// draw tracer FIXME test code
+				const p1 = shot.point;
+				const p2 = [shot.point[0] + shot.dir[0], shot.point[1] + shot.dir[1]];
+				const m = (p2[1] - p1[1]) / (p2[0] - p1[0]);
+				const c = p1[1] - (m * p1[0]);
+				// y = mx + c
+				const out1 = [0, c];
+				const out2 = [C.MAX_X, ((m * C.MAX_X) + c)];
+				self.ctx.strokeStyle = "#ff000044";
+				self.ctx.beginPath();
+				self.ctx.lineTo(out1[0], out1[1]);
+				self.ctx.lineTo(out2[0], out2[1]);
+				self.ctx.stroke();
+				self.ctx.closePath();
 
 				// TODO better handling for sound; this doesn't always play
 				if (shot.isNew) {
