@@ -19,7 +19,7 @@ const SERVER_PORT = process.env.PORT || 1337;
 const MIN_SHOT_INTV = 1000 / 3;
 
 const SPD_PLAYER = 5;
-const SPD_SHOT = 7;
+const SPD_SHOT = 1; // FIXME test code; restore (to 7)
 
 const TM_SPAWN_PROT = 1000;
 const TM_DEATH_COOLOFF = 2000;
@@ -122,7 +122,7 @@ class GameServer {
 
 			function doFireShot (p) {
 				if (p.input.mouseClick && (now - p.lastShot) > MIN_SHOT_INTV) {
-					if (self.shots.length) return; // FIXME test code
+					if (Object.keys(self.shots).length) return; // FIXME test code
 					p.lastShot = now;
 					const vDir = [
 						p.input.mouseClick[0] - p.x,
