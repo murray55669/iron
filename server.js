@@ -21,6 +21,31 @@ const MIN_SHOT_INTV = 1000 / 3;
 const SPD_PLAYER = 5;
 const SPD_SHOT = 7;
 
+const TM_SPAWN_PROT = 1000;
+const TM_DEATH_COOLOFF = 2000;
+
+class Player {
+	constructor (socketId, name, color) {
+		this.id = socketId;
+		this.color = color;
+		this.oppColor = util.invertColor(color);
+		this.name = name;
+		this.input = {};
+		this.lastShot = 0;
+		this.lastDead = 0;
+		this.canRespawn = false;
+	}
+
+	respawn () {
+		const now = Date.now();
+		this.x = util.getRandomInt(C.MIN_X + 50, C.MAX_X - 50);
+		this.y = util.getRandomInt(C.MIN_Y + 50, C.MAX_Y - 50);
+		this.lastSpawn = now;
+		this.dead = false;
+		this.shield = true;
+	}
+}
+
 class GameServer {
 	start () {
 		const self = this;
@@ -54,17 +79,9 @@ class GameServer {
 			self.shots = {};
 			io.on("connection", (socket) => {
 				socket.on("player-new", (data) => {
-					self.players[socket.id] = {
-						id: socket.id,
-						x: 300,
-						y: 300,
-						color: data.color,
-						oppColor: util.invertColor(data.color),
-						name: data.name,
-						input: {},
-						lastShot: 0,
-						dead: false
-					};
+					const newPlayer = new Player(socket.id, data.name, data.color);
+					self.players[socket.id] = newPlayer;
+					newPlayer.respawn();
 				});
 
 				socket.on("player-input", (data) => {
@@ -85,6 +102,12 @@ class GameServer {
 	}
 
 	_runLoop (self) {
+		function doTickStartCleanup () {
+			Object.values(self.players).forEach(p => {
+				p.canRespawn = false;
+			});
+		}
+
 		function doProcessPlayerInput (now) {
 			function doMovePlayer (p) {
 				const vMove = [(p.input.right || 0) - (p.input.left || 0), (p.input.down || 0) - (p.input.up || 0)];
@@ -115,19 +138,34 @@ class GameServer {
 						point: startPoint,
 						dir: vDir,
 						isNew: true,
-						bounces: 0
+						bounces: 2
 					};
 				}
 			}
 
+			function doRespawn (p) {
+				if (p.lastDead < (now - TM_DEATH_COOLOFF)) {
+					if (p.input.respawn) {
+						p.respawn();
+					} else {
+						p.canRespawn = true;
+					}
+				}
+			}
+
 			Object.values(self.players).forEach(p => {
-				if (p.dead) return; // p dead, bruh
-				doMovePlayer(p);
-				doFireShot(p);
+				if (p.dead) {
+					doRespawn(p);
+				}
+
+				if (!p.dead) {
+					doMovePlayer(p);
+					doFireShot(p);
+				}
 			});
 		}
 
-		function doUpdateShots () {
+		function doUpdateShots (now) {
 			function doCheckCollision (id, s) {
 				// check for player-shot collisions
 				Object.values(self.players).forEach(p => {
@@ -137,18 +175,26 @@ class GameServer {
 					const pPos = [p.x, p.y];
 
 					if (lineSegmentInCircle(basePos, endPos, pPos, C.SZ_PLAYER)) {
-						p.dead = true;
-						delete self.shots[id];
+						if (p.shield) {
+							// rebound the shot
+							mat.vec2.scale(s.dir, s.dir, -1);
+						} else {
+							p.dead = true;
+							p.lastDead = now;
+							delete self.shots[id];
+						}
 					}
 				});
 			}
 
 			function doMoveShot (id, s) {
 				mat.vec2.add(s.point, s.point, s.dir);
+
+				// handle wall bounces
 				const bX = s.point[0] > C.MAX_X || s.point[0] < C.MIN_X;
 				const bY = s.point[1] > C.MAX_Y || s.point[1] < C.MIN_Y;
 				if (bX || bY) {
-					if (s.bounces > 1) {
+					if (s.bounces <= 0) {
 						delete self.shots[id];
 						return;
 					}
@@ -158,7 +204,7 @@ class GameServer {
 					if (bY) {
 						s.dir[1] *= -1;
 					}
-					s.bounces++;
+					s.bounces--;
 					mat.vec2.add(s.point, s.point, s.dir);
 				}
 			}
@@ -177,7 +223,13 @@ class GameServer {
 			});
 		}
 
-		function doTickEndCleanup () {
+		function doTickEndCleanup (now) {
+			Object.values(self.players).forEach(p => {
+				if (p.lastSpawn < (now - TM_SPAWN_PROT)) {
+					p.shield = false;
+				}
+			});
+
 			Object.keys(self.shots).forEach(id => {
 				self.shots[id].isNew = false;
 			});
@@ -185,10 +237,11 @@ class GameServer {
 
 		setInterval(() => {
 			const now = Date.now();
+			doTickStartCleanup();
 			doProcessPlayerInput(now);
-			doUpdateShots();
+			doUpdateShots(now);
 			doSendDataToClients();
-			doTickEndCleanup();
+			doTickEndCleanup(now);
 		}, TICK_RATE);
 	}
 }

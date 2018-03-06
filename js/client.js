@@ -78,9 +78,17 @@ class Game {
 		this.input = {};
 
 		// game state
+		this.curPlayer = {};
 		this.dead = false;
 		this.players = {};
 		this.shots = {};
+
+		// keybinds
+		this.kUp = 87; // W
+		this.kLeft = 65; // A
+		this.kRight = 68; // S
+		this.kDown = 83; // D
+		this.kRespawn = 82; // R
 	}
 
 	/**
@@ -114,34 +122,40 @@ class Game {
 
 		$DOCUMENT.on("keydown", (evt) => {
 			switch (evt.keyCode) {
-				case 65: // A
+				case self.kLeft:
 					self.input.left = true;
 					break;
-				case 87: // W
+				case self.kUp:
 					self.input.up = true;
 					break;
-				case 68: // D
+				case self.kRight:
 					self.input.right = true;
 					break;
-				case 83: // S
+				case self.kDown:
 					self.input.down = true;
+					break;
+				case this.kRespawn:
+					self.input.respawn = true;
 					break;
 			}
 		});
 
 		$DOCUMENT.on("keyup", (evt) => {
 			switch (evt.keyCode) {
-				case 65: // A
+				case self.kLeft:
 					self.input.left = false;
 					break;
-				case 87: // W
+				case self.kUp:
 					self.input.up = false;
 					break;
-				case 68: // D
+				case self.kRight:
 					self.input.right = false;
 					break;
-				case 83: // S
+				case self.kDown:
 					self.input.down = false;
+					break;
+				case this.kRespawn:
+					self.input.respawn = false;
 					break;
 			}
 		});
@@ -186,9 +200,11 @@ class Game {
 
 			self.ctx.clearRect(0, 0, C.MAX_X, C.MAX_Y);
 
-			// draw players
+			// handle/draw players
 			Object.keys(self.players).forEach(key => {
 				const player = self.players[key];
+				if (player.id === self.socket.id) self.curPlayer = player;
+
 				self.ctx.fillStyle = player.color;
 				self.ctx.beginPath();
 				self.ctx.arc(player.x, player.y, C.SZ_PLAYER, 0, 2 * Math.PI);
@@ -213,13 +229,13 @@ class Game {
 					self.ctx.lineTo(player.x + C.SZ_PLAYER, player.y - C.SZ_PLAYER);
 					self.ctx.stroke();
 					self.ctx.closePath();
+				}
 
-					if (player.id === self.socket.id) {
-						if (!self.dead) {
-							self.dead = true;
-							self._sfx("cantwake.wav", 1);
-						}
-					}
+				if (player.shield) {
+					self.ctx.fillStyle = "#28b8e277";
+					self.ctx.beginPath();
+					self.ctx.arc(player.x, player.y, C.SZ_PLAYER + 2, 0, 2 * Math.PI);
+					self.ctx.fill();
 				}
 			});
 
@@ -237,6 +253,19 @@ class Game {
 				}
 			});
 
+			// handle player death state change TODO automate/standardise this for all server data?
+			if (self.curPlayer.dead) {
+				if (!self.dead) {
+					// on newly dead
+					self.dead = true;
+					self._sfx("cantwake.wav", 1);
+				}
+			} else {
+				if (self.dead) {
+					self.dead = false;
+				}
+			}
+
 			// draw death overlay
 			if (self.dead) {
 				// red overlay
@@ -252,6 +281,12 @@ class Game {
 				self.ctx.fillStyle = "black";
 				self.ctx.font = "52px serif";
 				self.ctx.fillText(`W A S T E D`, 260, 326);
+
+				// respawn text
+				if (self.curPlayer.canRespawn) {
+					self.ctx.font = "24px serif";
+					self.ctx.fillText(`Press ${String.fromCharCode(self.kRespawn)} to respawn`, 260, 386);
+				}
 			}
 
 			// draw FPS
