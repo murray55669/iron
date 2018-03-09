@@ -174,6 +174,9 @@ class GameServer {
 					const basePos = s.point;
 					const endPos = [...basePos];
 					mat.vec2.add(endPos, basePos, s.dir);
+					if (s.dir[0] === 0 && s.dir[1] === 0) {
+						mat.vec2.add(endPos, endPos, [0.1, 0.1]);
+					}
 					const pPos = [p.x, p.y];
 
 					if (p.shield) {
