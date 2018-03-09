@@ -209,9 +209,6 @@ class GameServer {
 			function doMoveShot (id, s) {
 				function doMove () {
 					mat.vec2.add(s.point, s.point, s.dir);
-					if (s.decayingDir) {
-						mat.vec2.add(s.point, s.point, s.decayingDir);
-					}
 				}
 
 				doMove();
@@ -234,7 +231,11 @@ class GameServer {
 					doMove();
 				}
 
-				mat.vec2.scale(s.dir, s.dir, 0.99);
+				if (mat.vec2.length(s.dir) > 0.01) {
+					mat.vec2.scale(s.dir, s.dir, 0.99);
+				} else {
+					s.dir = [0, 0];
+				}
 			}
 
 			Object.keys(self.shots).forEach(id => {
