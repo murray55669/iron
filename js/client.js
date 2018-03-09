@@ -196,6 +196,30 @@ class Game {
 	 * @private
 	 */
 	_runLoop (self) {
+		/**
+		 * Offsets an X-axis point relative to the current player (camera) position
+		 * @param point
+		 */
+		function ptX (point) {
+			return (self.curPlayer ? point - self.curPlayer.x : point) + C.MAX_X / 2;
+		}
+
+		/**
+		 * Offsets a Y-axis point relative to the current player (camera) position
+		 * @param point
+		 */
+		function ptY (point) {
+			return (self.curPlayer ? point - self.curPlayer.y : point) + C.MAX_Y / 2;
+		}
+
+		function drawLine (colour, ...pts) {
+			self.ctx.strokeStyle = colour;
+			self.ctx.beginPath();
+			pts.forEach(pt => self.ctx.lineTo(ptX(pt[0]), ptY(pt[1])));
+			self.ctx.stroke();
+			self.ctx.closePath();
+		}
+
 		let then = 0;
 		let fpsSmooth = 0.99; // larger = more smoothing
 		let fps = 60; // assume 60 for the first frame, adjust frame-by-frame thereafter
@@ -205,6 +229,9 @@ class Game {
 
 			self.ctx.clearRect(0, 0, C.MAX_X, C.MAX_Y);
 
+			// draw walls
+			drawLine("#000000", [0, 0], [C.MAX_X, 0], [C.MAX_X, C.MAX_Y], [0, C.MAX_Y], [0, 0]);
+
 			// handle/draw players
 			Object.keys(self.players).forEach(key => {
 				const player = self.players[key];
@@ -212,26 +239,26 @@ class Game {
 
 				self.ctx.fillStyle = player.color;
 				self.ctx.beginPath();
-				self.ctx.arc(player.x, player.y, C.SZ_PLAYER, 0, 2 * Math.PI);
+				self.ctx.arc(ptX(player.x), ptY(player.y), C.SZ_PLAYER, 0, 2 * Math.PI);
 				self.ctx.fill();
 
 				self.ctx.strokeStyle = player.oppColor;
 				self.ctx.beginPath();
-				self.ctx.arc(player.x, player.y, C.SZ_PLAYER, 0, 2 * Math.PI);
+				self.ctx.arc(ptX(player.x), ptY(player.y), C.SZ_PLAYER, 0, 2 * Math.PI);
 				self.ctx.stroke();
 				self.ctx.closePath();
 
 				self.ctx.fillStyle = "black";
 				self.ctx.font = "12px serif";
-				self.ctx.fillText(player.name, player.x - 10, player.y + 25);
+				self.ctx.fillText(player.name, ptX(player.x - 10), ptY(player.y + 25));
 
 				if (player.dead) {
 					self.ctx.strokeStyle = player.oppColor;
 					self.ctx.beginPath();
-					self.ctx.moveTo(player.x - C.SZ_PLAYER, player.y - C.SZ_PLAYER);
-					self.ctx.lineTo(player.x + C.SZ_PLAYER, player.y + C.SZ_PLAYER);
-					self.ctx.moveTo(player.x - C.SZ_PLAYER, player.y + C.SZ_PLAYER);
-					self.ctx.lineTo(player.x + C.SZ_PLAYER, player.y - C.SZ_PLAYER);
+					self.ctx.moveTo(ptX(player.x - C.SZ_PLAYER), ptY(player.y - C.SZ_PLAYER));
+					self.ctx.lineTo(ptX(player.x + C.SZ_PLAYER), ptY(player.y + C.SZ_PLAYER));
+					self.ctx.moveTo(ptX(player.x - C.SZ_PLAYER), ptY(player.y + C.SZ_PLAYER));
+					self.ctx.lineTo(ptX(player.x + C.SZ_PLAYER), ptY(player.y - C.SZ_PLAYER));
 					self.ctx.stroke();
 					self.ctx.closePath();
 				}
@@ -239,7 +266,7 @@ class Game {
 				if (player.shield) {
 					self.ctx.fillStyle = "#28b8e277";
 					self.ctx.beginPath();
-					self.ctx.arc(player.x, player.y, C.SZ_PLAYER + 2, 0, 2 * Math.PI);
+					self.ctx.arc(ptX(player.x), ptY(player.y), C.SZ_PLAYER_SHIELDED, 0, 2 * Math.PI);
 					self.ctx.fill();
 				}
 			});
@@ -249,7 +276,7 @@ class Game {
 				const shot = self.shots[key];
 				self.ctx.fillStyle = "#ff0000";
 				self.ctx.beginPath();
-				self.ctx.arc(shot.point[0], shot.point[1], 2, 0, 2 * Math.PI);
+				self.ctx.arc(ptX(shot.point[0]), ptY(shot.point[1]), 2, 0, 2 * Math.PI);
 				self.ctx.fill();
 
 				// draw tracer FIXME test code
@@ -262,8 +289,8 @@ class Game {
 				const out2 = [C.MAX_X, ((m * C.MAX_X) + c)];
 				self.ctx.strokeStyle = "#ff000044";
 				self.ctx.beginPath();
-				self.ctx.lineTo(out1[0], out1[1]);
-				self.ctx.lineTo(out2[0], out2[1]);
+				self.ctx.lineTo(ptX(out1[0]), ptY(out1[1]));
+				self.ctx.lineTo(ptX(out2[0]), ptY(out2[1]));
 				self.ctx.stroke();
 				self.ctx.closePath();
 

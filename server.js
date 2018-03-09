@@ -112,6 +112,7 @@ class GameServer {
 			function doMovePlayer (p) {
 				const vMove = [(p.input.right || 0) - (p.input.left || 0), (p.input.down || 0) - (p.input.up || 0)];
 				mat.vec2.scale(vMove, mat.vec2.normalize(vMove, vMove), SPD_PLAYER);
+				p.dir = vMove;
 				p.x += vMove[0];
 				p.y += vMove[1];
 				if (p.x > C.MAX_X) p.x = C.MAX_X;
@@ -175,9 +176,9 @@ class GameServer {
 					mat.vec2.add(endPos, basePos, s.dir);
 					const pPos = [p.x, p.y];
 
-					if (lineSegmentInCircle(basePos, endPos, pPos, C.SZ_PLAYER)) {
-						if (p.shield) {
-							const hitPoint = findIntersect(pPos, C.SZ_PLAYER, basePos);
+					if (p.shield) {
+						if (lineSegmentInCircle(basePos, endPos, pPos, C.SZ_PLAYER_SHIELDED)) {
+							const hitPoint = findIntersect(pPos, C.SZ_PLAYER_SHIELDED, basePos);
 							const scaledNormal = [];
 							mat.vec2.sub(scaledNormal, hitPoint, pPos);
 							mat.vec2.normalize(scaledNormal, scaledNormal);
@@ -189,7 +190,14 @@ class GameServer {
 
 							// rebound the shot
 							s.dir = refDir;
-						} else {
+
+							// add player speed, scaled for the bantz
+							const pSpeed = [...p.dir];
+							mat.vec2.scale(pSpeed, pSpeed, 2); // TODO tweak scaling
+							mat.vec2.add(s.dir, s.dir, pSpeed);
+						}
+					} else {
+						if (lineSegmentInCircle(basePos, endPos, pPos, C.SZ_PLAYER)) {
 							p.dead = true;
 							p.lastDead = now;
 							delete self.shots[id];
@@ -199,7 +207,14 @@ class GameServer {
 			}
 
 			function doMoveShot (id, s) {
-				mat.vec2.add(s.point, s.point, s.dir);
+				function doMove () {
+					mat.vec2.add(s.point, s.point, s.dir);
+					if (s.decayingDir) {
+						mat.vec2.add(s.point, s.point, s.decayingDir);
+					}
+				}
+
+				doMove();
 
 				// handle wall bounces
 				const bX = s.point[0] > C.MAX_X || s.point[0] < C.MIN_X;
@@ -216,8 +231,10 @@ class GameServer {
 						s.dir[1] *= -1;
 					}
 					// s.bounces--; // FIXME test code; restore
-					mat.vec2.add(s.point, s.point, s.dir);
+					doMove();
 				}
+
+				mat.vec2.scale(s.dir, s.dir, 0.99);
 			}
 
 			Object.keys(self.shots).forEach(id => {
@@ -228,6 +245,7 @@ class GameServer {
 		}
 
 		function doSendDataToClients () {
+			// TODO only send the data needed, instead of all the internals
 			io.sockets.emit("state", {
 				players: self.players,
 				shots: self.shots
