@@ -25,24 +25,29 @@ const TM_SPAWN_PROT = 1000;
 const TM_DEATH_COOLOFF = 2000;
 
 class Player {
-	constructor (socketId, name, color) {
+	constructor (socketId, name, team) {
 		this.id = socketId;
-		this.color = color;
-		this.oppColor = util.invertColor(color);
+		this.team = team;
 		this.name = name;
 		this.input = {};
-		this.lastShot = 0;
+		this.clickStart = null;
+		this.clickEnd = null;
 		this.lastDead = 0;
 		this.canRespawn = false;
+		this.shotPower = 0;
 	}
 
 	respawn () {
 		const now = Date.now();
-		this.x = util.getRandomInt(C.MIN_X + 50, C.MAX_X - 50);
-		this.y = util.getRandomInt(C.MIN_Y + 50, C.MAX_Y - 50);
+		const minX = this.team === 1 ? 1 : C.MAX_X / 2;
+		const maxX = this.team === 1 ? C.MAX_X / 2 : C.MAX_X - 1;
+		const minY = this.team === 1 ? 1 : C.MAX_Y / 2;
+		const maxY = this.team === 1 ? C.MAX_Y / 2 : C.MAX_Y - 1;
+
+		this.x = util.getRandomInt(minX, maxX);
+		this.y = util.getRandomInt(minY, maxY);
 		this.lastSpawn = now;
 		this.dead = false;
-		this.shield = true;
 	}
 }
 
@@ -75,11 +80,16 @@ class GameServer {
 
 		function doAddSocketHandlers () {
 			self.players = {};
-			self.shotIndex = 0;
-			self.shots = {};
+			self.ball = {
+				point: [C.MAX_X / 2, C.MAX_Y / 2],
+				dir: [0, 0],
+				team: 0,
+				caughtBy: [],
+				lastShot: 0
+			};
 			io.on("connection", (socket) => {
 				socket.on("player-new", (data) => {
-					const newPlayer = new Player(socket.id, data.name, data.color);
+					const newPlayer = new Player(socket.id, data.name, data.team);
 					self.players[socket.id] = newPlayer;
 					newPlayer.respawn();
 				});
@@ -91,6 +101,10 @@ class GameServer {
 
 				socket.on("disconnect", () => {
 					delete self.players[socket.id];
+					if (self.ball.caughtBy.length === 1 && self.ball.caughtBy[0] === socket.id) {
+						self.ball.caughtBy = [];
+						self.ball.team = 0;
+					}
 				});
 			});
 		}
@@ -121,30 +135,6 @@ class GameServer {
 				if (p.y < C.MIN_Y) p.y = C.MIN_Y;
 			}
 
-			function doFireShot (p) {
-				if (p.input.mouseClick && (now - p.lastShot) > MIN_SHOT_INTV) {
-					if (Object.keys(self.shots).length) return; // FIXME test code
-					p.lastShot = now;
-					const vDir = [
-						p.input.mouseClick[0] - p.x,
-						p.input.mouseClick[1] - p.y
-					];
-					mat.vec2.normalize(vDir, vDir);
-					// ensure the shot starts outside the player
-					const temp = [];
-					mat.vec2.scale(temp, vDir, C.SZ_PLAYER + 1);
-					const startPoint = [p.x, p.y];
-					mat.vec2.add(startPoint, startPoint, temp);
-					mat.vec2.scale(vDir, vDir, SPD_SHOT); // pre-scale the movement vector, instead of doing it every loop
-					self.shots[self.shotIndex++] = {
-						point: startPoint,
-						dir: vDir,
-						isNew: true,
-						bounces: 2
-					};
-				}
-			}
-
 			function doRespawn (p) {
 				if (p.lastDead < (now - TM_DEATH_COOLOFF)) {
 					if (p.input.respawn) {
@@ -161,118 +151,169 @@ class GameServer {
 				}
 
 				if (!p.dead) {
+					if (self.ball.caughtBy.length === 1 && self.ball.caughtBy[0] === p.id) {
+						if (p.input.mouseClick) {
+							if (!p.clickStart) {
+								p.clickStart = now;
+							} else {
+								p.shotPower = Math.min((now - p.clickStart) / C.TM_MAX_SHOT_CHANNEL, 1);
+							}
+						} else {
+							if (p.clickStart) {
+								p.clickEnd = now;
+								p.shotPower = 0;
+							}
+						}
+					}
 					doMovePlayer(p);
-					doFireShot(p);
 				}
 			});
 		}
 
-		function doUpdateShots (now) {
-			function doCheckCollision (id, s) {
-				// check for player-shot collisions
+		function doUpdateBall (now) {
+			function doCheckCollision (b) {
+				// check for player-ball collisions
 				Object.values(self.players).forEach(p => {
-					const basePos = s.point;
+					const basePos = b.point;
 					const endPos = [...basePos];
-					mat.vec2.add(endPos, basePos, s.dir);
-					if (s.dir[0] === 0 && s.dir[1] === 0) {
-						mat.vec2.add(endPos, endPos, [0.1, 0.1]);
+					mat.vec2.add(endPos, basePos, b.dir);
+					// cheeky hack to prevent the ball "stalling" and becoming un-interactable
+					if (b.dir[0] === 0 && b.dir[1] === 0) {
+						mat.vec2.add(endPos, endPos, [p.dir[0] > 0 ? 0.1 : -0.1, p.dir[1] > 0 ? 0.1 : -0.1]);
 					}
 					const pPos = [p.x, p.y];
 
-					if (p.shield) {
-						if (lineSegmentInCircle(basePos, endPos, pPos, C.SZ_PLAYER_SHIELDED)) {
-							const hitPoint = findIntersect(pPos, C.SZ_PLAYER_SHIELDED, basePos);
-							const scaledNormal = [];
-							mat.vec2.sub(scaledNormal, hitPoint, pPos);
-							mat.vec2.normalize(scaledNormal, scaledNormal);
-							// reflected vector = d - 2(d.n)*n
-							const refDir = [];
-							const scale = 2 * (mat.vec2.dot(s.dir, scaledNormal));
-							mat.vec2.scale(scaledNormal, scaledNormal, scale);
-							mat.vec2.sub(refDir, s.dir, scaledNormal);
+					if ((now - b.lastShot > C.TM_MIN_SHOT_DUR) && lineSegmentInCircle(basePos, endPos, pPos, C.SZ_PLAYER_BALL_CATCH)) {
+						b.team = p.team;
+						if (!b.caughtBy.includes(p.id)) b.caughtBy.push(p.id);
+					}
 
-							// rebound the shot
-							s.dir = refDir;
+					if (lineSegmentInCircle(basePos, endPos, pPos, C.SZ_PLAYER)) {
+						const hitPoint = findIntersect(pPos, C.SZ_PLAYER, basePos);
+						const scaledNormal = [];
+						mat.vec2.sub(scaledNormal, hitPoint, pPos);
+						mat.vec2.normalize(scaledNormal, scaledNormal);
+						// reflected vector = d - 2(d.n)*n
+						const refDir = [];
+						const scale = 2 * (mat.vec2.dot(b.dir, scaledNormal));
+						mat.vec2.scale(scaledNormal, scaledNormal, scale);
+						mat.vec2.sub(refDir, b.dir, scaledNormal);
 
-							// add player speed, scaled for the bantz
-							const pSpeed = [...p.dir];
-							mat.vec2.scale(pSpeed, pSpeed, 2); // TODO tweak scaling
-							mat.vec2.add(s.dir, s.dir, pSpeed);
-						}
-					} else {
-						if (lineSegmentInCircle(basePos, endPos, pPos, C.SZ_PLAYER)) {
-							p.dead = true;
-							p.lastDead = now;
-							delete self.shots[id];
-						}
+						// rebound the ball
+						b.dir = refDir;
+
+						// add player speed, scaled for the bantz
+						const pSpeed = [...p.dir];
+						mat.vec2.scale(pSpeed, pSpeed, 2); // TODO tweak scaling
+						mat.vec2.add(b.dir, b.dir, pSpeed);
 					}
 				});
+
+				if (b.caughtBy.length > 1) {
+					b.caughtBy = [];
+					b.team = 0;
+				}
 			}
 
-			function doMoveShot (id, s) {
+			function doMoveBall (b) {
 				function doMove () {
-					mat.vec2.add(s.point, s.point, s.dir);
+					mat.vec2.add(b.point, b.point, b.dir);
 				}
 
-				doMove();
+				function doBounce () {
+					// handle wall bounces
+					const bX = b.point[0] > C.MAX_X || b.point[0] < C.MIN_X;
+					const bY = b.point[1] > C.MAX_Y || b.point[1] < C.MIN_Y;
+					if (bX || bY) {
+						if (bX) {
+							b.dir[0] *= -1;
+						}
+						if (bY) {
+							b.dir[1] *= -1;
+						}
+						doMove();
+					}
+				}
 
-				// handle wall bounces
-				const bX = s.point[0] > C.MAX_X || s.point[0] < C.MIN_X;
-				const bY = s.point[1] > C.MAX_Y || s.point[1] < C.MIN_Y;
-				if (bX || bY) {
-					if (s.bounces <= 0) {
-						delete self.shots[id];
-						return;
+				function doFixBallSpeed () {
+					if (mat.vec2.length(b.dir) > 0.01) {
+						mat.vec2.scale(b.dir, b.dir, 0.99);
+					} else {
+						b.dir = [0, 0];
 					}
-					if (bX) {
-						s.dir[0] *= -1;
-					}
-					if (bY) {
-						s.dir[1] *= -1;
-					}
-					// s.bounces--; // FIXME test code; restore
+				}
+
+				function getBallSpeed (clickDuration, maxSpeed, maxDuration) {
+					return Math.min(clickDuration / (maxDuration / maxSpeed), maxSpeed);
+				}
+
+				if (b.caughtBy.length !== 1) {
 					doMove();
-				}
-
-				if (mat.vec2.length(s.dir) > 0.01) {
-					mat.vec2.scale(s.dir, s.dir, 0.99);
+					doBounce();
+					doFixBallSpeed();
 				} else {
-					s.dir = [0, 0];
+					const p = self.players[b.caughtBy[0]];
+					if (p && p.input.mousePos) {
+						b.dir = [0, 0];
+
+						// keep the ball stuck to the player
+						const norm = [];
+						mat.vec2.sub(norm, p.input.mousePos, [p.x, p.y]);
+						mat.vec2.normalize(norm, norm);
+						const newPoint = [];
+						mat.vec2.scale(newPoint, norm, C.SZ_PLAYER_BALL_CATCH);
+						mat.vec2.add(newPoint, newPoint, [p.x, p.y]);
+						b.point = newPoint;
+
+						// fire the ball
+						if (p.clickStart && p.clickEnd) {
+							const speed = getBallSpeed(p.clickEnd - p.clickStart, C.SPD_MAX_SHOT, C.TM_MAX_SHOT_CHANNEL);
+							b.dir = mat.vec2.scale(b.dir, norm, speed);
+							b.lastShot = now;
+							b.caughtBy = [];
+							doMove();
+						}
+					}
 				}
 			}
 
-			Object.keys(self.shots).forEach(id => {
-				const s = self.shots[id];
-				doCheckCollision(id, s);
-				doMoveShot(id, s);
-			});
+			doCheckCollision(self.ball);
+			doMoveBall(self.ball);
 		}
 
 		function doSendDataToClients () {
 			// TODO only send the data needed, instead of all the internals
 			io.sockets.emit("state", {
 				players: self.players,
-				shots: self.shots
+				ball: self.ball
 			});
 		}
 
 		function doTickEndCleanup (now) {
+			// clean up player inputs
 			Object.values(self.players).forEach(p => {
-				if (p.lastSpawn < (now - TM_SPAWN_PROT)) {
-					// p.shield = false; // FIXME test code; restore
+				if (p.clickStart && p.clickEnd) {
+					p.clickStart = null;
+					p.clickEnd = null;
 				}
 			});
 
-			Object.keys(self.shots).forEach(id => {
-				self.shots[id].isNew = false;
-			});
+			// reset the ball if it's outside the play area
+			const bX = self.ball.point[0] > C.MAX_X || self.ball.point[0] < C.MIN_X;
+			const bY = self.ball.point[1] > C.MAX_Y || self.ball.point[1] < C.MIN_Y;
+			if (bX || bY) {
+				self.ball.point = [C.MAX_X / 2, C.MAX_Y / 2];
+				self.ball.caughtBy = [];
+				self.ball.team = 0;
+				self.ball.lastShot = 0;
+			}
 		}
 
 		setInterval(() => {
 			const now = Date.now();
 			doTickStartCleanup();
 			doProcessPlayerInput(now);
-			doUpdateShots(now);
+			doUpdateBall(now);
 			doSendDataToClients();
 			doTickEndCleanup(now);
 		}, TICK_RATE);

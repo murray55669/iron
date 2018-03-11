@@ -20,14 +20,15 @@ class Ui {
 			const $txtIntro = $(`<p>New phone, who dis?</p>`);
 			const $wrpIpts = $(`<div/>`);
 			const $iptName = $(`<input placeholder="sweet nickname">`).appendTo($wrpIpts);
-			const $iptColor = $(`<input type="color" value="#888888">`).appendTo($wrpIpts);
+			const $iptTeam = $(`<select/>`).appendTo($wrpIpts);
+			$iptTeam.append(`<option value="1">Red</option>`).append(`<option value="2">Not Red</option>`);
 			const $btnGo = $(`<button>Enter</button>`).click(() => {
 				const n = $iptName.val();
-				const c = $iptColor.val();
-				if (n && c) {
+				const t = Number($iptTeam.val());
+				if (n && t && (t === 1 || t === 2)) {
 					Ui._closeOverlay(self);
-					resolve({name: n, color: c});
-				} else self.error(`invalid name or colour`);
+					resolve({name: n, team: t});
+				} else self.error(`invalid name or team`);
 			});
 			self._fullscreenOverlay(self, $txtIntro, $wrpIpts, $btnGo);
 		});
@@ -67,9 +68,9 @@ class Ui {
 }
 
 class Game {
-	constructor (username, color) {
+	constructor (username, team) {
 		this.username = username;
-		this.color = color;
+		this.team = team;
 
 		// client state
 		this.canvas = null;
@@ -81,7 +82,7 @@ class Game {
 		this.curPlayer = {};
 		this.dead = false;
 		this.players = {};
-		this.shots = {};
+		this.ball = null;
 
 		// keybinds
 		this.kUp = 87; // W
@@ -164,9 +165,8 @@ class Game {
 			self.input.mouseClick = util.getCursorPosition(self.$canvas, evt);
 		});
 		self.$canvas.on("mousemove", (evt) => {
-			if (self.input.mouseClick) {
-				self.input.mouseClick = util.getCursorPosition(self.$canvas, evt);
-			}
+			const point = util.getCursorPosition(self.$canvas, evt);
+			self.input.mousePos = self.ptXYIpt(point); // [point[0] + pAdjX - 400, point[1] + pAdjY - 300];
 		});
 		self.$canvas.on("mouseup", () => {
 			self.input.mouseClick = null;
@@ -175,13 +175,13 @@ class Game {
 		// join the game
 		self.socket.emit("player-new", {
 			name: self.username,
-			color: self.color
+			team: self.team
 		});
 
 		// data received handler
 		self.socket.on("state", (data) => {
 			self.players = data.players;
-			self.shots = data.shots;
+			self.ball = data.ball;
 		});
 
 		// data sending loop
@@ -191,31 +191,43 @@ class Game {
 	}
 
 	/**
+	 * Offsets an X-axis point relative to the current player (camera) position
+	 * @param point
+	 */
+	ptX (point) {
+		return (this.curPlayer ? point - this.curPlayer.x : point) + C.MAX_X / 2;
+	}
+
+	/**
+	 * Offsets a Y-axis point relative to the current player (camera) position
+	 * @param point
+	 */
+	ptY (point) {
+		return (this.curPlayer ? point - this.curPlayer.y : point) + C.MAX_Y / 2;
+	}
+
+	ptXIpt (point) {
+		return (this.curPlayer ? this.curPlayer.x + point : point) - C.MAX_X / 2;
+	}
+
+	ptYIpt (point) {
+		return (this.curPlayer ? this.curPlayer.y + point : point) - C.MAX_Y / 2;
+	}
+
+	ptXYIpt (point) {
+		return [this.ptXIpt(point[0]), this.ptYIpt(point[1])];
+	}
+
+	/**
 	 * Run the game rendering loop
 	 * @param self this Game
 	 * @private
 	 */
 	_runLoop (self) {
-		/**
-		 * Offsets an X-axis point relative to the current player (camera) position
-		 * @param point
-		 */
-		function ptX (point) {
-			return (self.curPlayer ? point - self.curPlayer.x : point) + C.MAX_X / 2;
-		}
-
-		/**
-		 * Offsets a Y-axis point relative to the current player (camera) position
-		 * @param point
-		 */
-		function ptY (point) {
-			return (self.curPlayer ? point - self.curPlayer.y : point) + C.MAX_Y / 2;
-		}
-
 		function drawLine (colour, ...pts) {
 			self.ctx.strokeStyle = colour;
 			self.ctx.beginPath();
-			pts.forEach(pt => self.ctx.lineTo(ptX(pt[0]), ptY(pt[1])));
+			pts.forEach(pt => self.ctx.lineTo(self.ptX(pt[0]), self.ptY(pt[1])));
 			self.ctx.stroke();
 			self.ctx.closePath();
 		}
@@ -232,73 +244,89 @@ class Game {
 			// draw walls
 			drawLine("#000000", [0, 0], [C.MAX_X, 0], [C.MAX_X, C.MAX_Y], [0, C.MAX_Y], [0, 0]);
 
+			// draw halfway line
+			drawLine("#444444", [C.MAX_X / 2, 0], [C.MAX_X / 2, C.MAX_Y]);
+
 			// handle/draw players
 			Object.keys(self.players).forEach(key => {
 				const player = self.players[key];
 				if (player.id === self.socket.id) self.curPlayer = player;
 
-				self.ctx.fillStyle = player.color;
+				// draw lad
+				self.ctx.fillStyle = player.team === 1 ? "#ff0000" : "#00ff00";
 				self.ctx.beginPath();
-				self.ctx.arc(ptX(player.x), ptY(player.y), C.SZ_PLAYER, 0, 2 * Math.PI);
+				self.ctx.arc(self.ptX(player.x), self.ptY(player.y), C.SZ_PLAYER, 0, 2 * Math.PI);
 				self.ctx.fill();
 
-				self.ctx.strokeStyle = player.oppColor;
+				// draw outline
+				self.ctx.strokeStyle = "#000000";
 				self.ctx.beginPath();
-				self.ctx.arc(ptX(player.x), ptY(player.y), C.SZ_PLAYER, 0, 2 * Math.PI);
+				self.ctx.arc(self.ptX(player.x), self.ptY(player.y), C.SZ_PLAYER, 0, 2 * Math.PI);
 				self.ctx.stroke();
 				self.ctx.closePath();
 
+				// draw name
 				self.ctx.fillStyle = "black";
 				self.ctx.font = "12px serif";
-				self.ctx.fillText(player.name, ptX(player.x - 10), ptY(player.y + 25));
+				self.ctx.fillText(player.name, self.ptX(player.x - 10), self.ptY(player.y + 25));
+
+				// draw power bar
+				// outline
+				self.ctx.fillStyle = "#000000";
+				self.ctx.beginPath();
+				self.ctx.lineTo(self.ptX(player.x - 10), self.ptY(player.y - 20));
+				self.ctx.lineTo(self.ptX(player.x + 10), self.ptY(player.y - 20));
+				self.ctx.lineTo(self.ptX(player.x + 10), self.ptY(player.y - 16));
+				self.ctx.lineTo(self.ptX(player.x - 10), self.ptY(player.y - 16));
+				self.ctx.fill();
+				self.ctx.closePath();
+				// content
+				self.ctx.fillStyle = "#ffff00";
+				self.ctx.beginPath();
+				console.log(player.shotPower);
+				const lineLen = (player.shotPower * 18) - 9;
+				self.ctx.lineTo(self.ptX(player.x - 9), self.ptY(player.y - 19));
+				self.ctx.lineTo(self.ptX(player.x + lineLen), self.ptY(player.y - 19));
+				self.ctx.lineTo(self.ptX(player.x + lineLen), self.ptY(player.y - 17));
+				self.ctx.lineTo(self.ptX(player.x - 9), self.ptY(player.y - 17));
+				self.ctx.fill();
+				self.ctx.closePath();
 
 				if (player.dead) {
-					self.ctx.strokeStyle = player.oppColor;
+					self.ctx.strokeStyle = "#000000";
 					self.ctx.beginPath();
-					self.ctx.moveTo(ptX(player.x - C.SZ_PLAYER), ptY(player.y - C.SZ_PLAYER));
-					self.ctx.lineTo(ptX(player.x + C.SZ_PLAYER), ptY(player.y + C.SZ_PLAYER));
-					self.ctx.moveTo(ptX(player.x - C.SZ_PLAYER), ptY(player.y + C.SZ_PLAYER));
-					self.ctx.lineTo(ptX(player.x + C.SZ_PLAYER), ptY(player.y - C.SZ_PLAYER));
+					self.ctx.moveTo(self.ptX(player.x - C.SZ_PLAYER), self.ptY(player.y - C.SZ_PLAYER));
+					self.ctx.lineTo(self.ptX(player.x + C.SZ_PLAYER), self.ptY(player.y + C.SZ_PLAYER));
+					self.ctx.moveTo(self.ptX(player.x - C.SZ_PLAYER), self.ptY(player.y + C.SZ_PLAYER));
+					self.ctx.lineTo(self.ptX(player.x + C.SZ_PLAYER), self.ptY(player.y - C.SZ_PLAYER));
 					self.ctx.stroke();
 					self.ctx.closePath();
 				}
-
-				if (player.shield) {
-					self.ctx.fillStyle = "#28b8e277";
-					self.ctx.beginPath();
-					self.ctx.arc(ptX(player.x), ptY(player.y), C.SZ_PLAYER_SHIELDED, 0, 2 * Math.PI);
-					self.ctx.fill();
-				}
 			});
 
-			// draw shots
-			Object.keys(self.shots).forEach(key => {
-				const shot = self.shots[key];
-				self.ctx.fillStyle = "#ff0000";
+			// draw ball
+			if (self.ball) {
+				const ballCol = self.ball.team === 0 ? "#000000" : self.ball.team === 1 ? "#ff0000" : "#00ff00";
+				self.ctx.fillStyle = ballCol;
 				self.ctx.beginPath();
-				self.ctx.arc(ptX(shot.point[0]), ptY(shot.point[1]), 2, 0, 2 * Math.PI);
+				self.ctx.arc(self.ptX(self.ball.point[0]), self.ptY(self.ball.point[1]), 2, 0, 2 * Math.PI);
 				self.ctx.fill();
 
 				// draw tracer FIXME test code
-				const p1 = shot.point;
-				const p2 = [shot.point[0] + shot.dir[0], shot.point[1] + shot.dir[1]];
+				const p1 = self.ball.point;
+				const p2 = [self.ball.point[0] + self.ball.dir[0], self.ball.point[1] + self.ball.dir[1]];
 				const m = (p2[1] - p1[1]) / (p2[0] - p1[0]);
 				const c = p1[1] - (m * p1[0]);
 				// y = mx + c
 				const out1 = [0, c];
 				const out2 = [C.MAX_X, ((m * C.MAX_X) + c)];
-				self.ctx.strokeStyle = "#ff000044";
+				self.ctx.strokeStyle = `${ballCol}44`;
 				self.ctx.beginPath();
-				self.ctx.lineTo(ptX(out1[0]), ptY(out1[1]));
-				self.ctx.lineTo(ptX(out2[0]), ptY(out2[1]));
+				self.ctx.lineTo(self.ptX(out1[0]), self.ptY(out1[1]));
+				self.ctx.lineTo(self.ptX(out2[0]), self.ptY(out2[1]));
 				self.ctx.stroke();
 				self.ctx.closePath();
-
-				// TODO better handling for sound; this doesn't always play
-				if (shot.isNew) {
-					self._sfx("shaq_pap_short.mp3", 0.3);
-				}
-			});
+			}
 
 			// handle player death state change TODO automate/standardise this for all server data?
 			if (self.curPlayer.dead) {
@@ -371,6 +399,6 @@ class Game {
 const ui = new Ui();
 ui.login()
 	.then((result) => {
-		const g = new Game(result.name, result.color);
+		const g = new Game(result.name, result.team);
 		g.play();
 	});
