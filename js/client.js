@@ -2,6 +2,7 @@
 "use strict";
 
 const SEND_RATE = 1000 / 60;
+const $WINDOW = $(window);
 const $DOCUMENT = $(document);
 const $BODY = $(`body`);
 
@@ -75,6 +76,8 @@ class Game {
 		// client state
 		this.canvas = null;
 		this.$canvas = null;
+		this.maxX = null;
+		this.maxY = null;
 		this.socket = null;
 		this.input = {};
 
@@ -109,10 +112,12 @@ class Game {
 	 */
 	_setup (self) {
 		self.canvas = document.getElementById("viewport");
-		self.canvas.width = C.MAX_X;
-		self.canvas.height = C.MAX_Y;
-		self.ctx = self.canvas.getContext("2d");
 		self.$canvas = $(self.canvas);
+		self.maxX = self.$canvas.width();
+		self.maxY = self.$canvas.height();
+		self.canvas.width = self.maxX;
+		self.canvas.height = self.maxY;
+		self.ctx = self.canvas.getContext("2d");
 		self.socket = io();
 		self.input = {
 			up: false,
@@ -161,12 +166,19 @@ class Game {
 			}
 		});
 
+		$WINDOW.on("resize", () => {
+			self.maxX = self.$canvas.width();
+			self.maxY = self.$canvas.height();
+			self.canvas.width = self.maxX;
+			self.canvas.height = self.maxY;
+		});
+
 		self.$canvas.on("mousedown", (evt) => {
 			self.input.mouseClick = util.getCursorPosition(self.$canvas, evt);
 		});
 		self.$canvas.on("mousemove", (evt) => {
 			const point = util.getCursorPosition(self.$canvas, evt);
-			self.input.mousePos = self.ptXYIpt(point); // [point[0] + pAdjX - 400, point[1] + pAdjY - 300];
+			self.input.mousePos = self.ptXYIpt(point);
 		});
 		self.$canvas.on("mouseup", () => {
 			self.input.mouseClick = null;
@@ -195,7 +207,7 @@ class Game {
 	 * @param point
 	 */
 	ptX (point) {
-		return (this.curPlayer ? point - this.curPlayer.x : point) + C.MAX_X / 2;
+		return (this.curPlayer ? point - this.curPlayer.x : point) + this.maxX / 2;
 	}
 
 	/**
@@ -203,15 +215,15 @@ class Game {
 	 * @param point
 	 */
 	ptY (point) {
-		return (this.curPlayer ? point - this.curPlayer.y : point) + C.MAX_Y / 2;
+		return (this.curPlayer ? point - this.curPlayer.y : point) + this.maxY / 2;
 	}
 
 	ptXIpt (point) {
-		return (this.curPlayer ? this.curPlayer.x + point : point) - C.MAX_X / 2;
+		return (this.curPlayer ? this.curPlayer.x + point : point) - this.maxX / 2;
 	}
 
 	ptYIpt (point) {
-		return (this.curPlayer ? this.curPlayer.y + point : point) - C.MAX_Y / 2;
+		return (this.curPlayer ? this.curPlayer.y + point : point) - this.maxY / 2;
 	}
 
 	ptXYIpt (point) {
@@ -239,7 +251,7 @@ class Game {
 			const deltaTime = now - then;
 			then = now;
 
-			self.ctx.clearRect(0, 0, C.MAX_X, C.MAX_Y);
+			self.ctx.clearRect(0, 0, self.maxX, self.maxY);
 
 			// draw walls
 			drawLine("#000000", [0, 0], [C.MAX_X, 0], [C.MAX_X, C.MAX_Y], [0, C.MAX_Y], [0, 0]);
@@ -283,7 +295,6 @@ class Game {
 				// content
 				self.ctx.fillStyle = "#ffff00";
 				self.ctx.beginPath();
-				console.log(player.shotPower);
 				const lineLen = (player.shotPower * 18) - 9;
 				self.ctx.lineTo(self.ptX(player.x - 9), self.ptY(player.y - 19));
 				self.ctx.lineTo(self.ptX(player.x + lineLen), self.ptY(player.y - 19));
@@ -318,8 +329,11 @@ class Game {
 				const m = (p2[1] - p1[1]) / (p2[0] - p1[0]);
 				const c = p1[1] - (m * p1[0]);
 				// y = mx + c
-				const out1 = [0, c];
-				const out2 = [C.MAX_X, ((m * C.MAX_X) + c)];
+				// x = (y - c) / m
+				const out1 = c < 0 ? [(0 - c) / m, 0] : c > C.MAX_Y ? [(C.MAX_Y - c) / m, C.MAX_Y] : [0, c];
+				const y2 = (m * C.MAX_X) + c;
+				const out2 = y2 > C.MAX_Y ? [(C.MAX_Y - c) / m, C.MAX_Y] : y2 < 0 ? [(0 - c) / m, 0] : [C.MAX_X, y2];
+
 				self.ctx.strokeStyle = `${ballCol}44`;
 				self.ctx.beginPath();
 				self.ctx.lineTo(self.ptX(out1[0]), self.ptY(out1[1]));
@@ -347,9 +361,9 @@ class Game {
 				self.ctx.fillStyle = "#ff000099";
 				self.ctx.beginPath();
 				self.ctx.lineTo(0, 0);
-				self.ctx.lineTo(C.MAX_X, 0);
-				self.ctx.lineTo(C.MAX_X, C.MAX_Y);
-				self.ctx.lineTo(0, C.MAX_Y);
+				self.ctx.lineTo(self.maxX, 0);
+				self.ctx.lineTo(self.maxX, self.maxY);
+				self.ctx.lineTo(0, self.maxY);
 				self.ctx.fill();
 
 				// dead text
