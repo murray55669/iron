@@ -86,6 +86,7 @@ class Game {
 		this.dead = false;
 		this.players = {};
 		this.ball = null;
+		this.score = null;
 
 		// keybinds
 		this.kUp = 87; // W
@@ -194,6 +195,7 @@ class Game {
 		self.socket.on("state", (data) => {
 			self.players = data.players;
 			self.ball = data.ball;
+			self.score = data.score;
 		});
 
 		// data sending loop
@@ -244,6 +246,13 @@ class Game {
 			self.ctx.closePath();
 		}
 
+		function drawCircle (colour, centre, radius) {
+			self.ctx.fillStyle = colour;
+			self.ctx.beginPath();
+			self.ctx.arc(self.ptX(centre[0]), self.ptY(centre[1]), radius, 0, 2 * Math.PI);
+			self.ctx.fill();
+		}
+
 		let then = 0;
 		let fpsSmooth = 0.99; // larger = more smoothing
 		let fps = 60; // assume 60 for the first frame, adjust frame-by-frame thereafter
@@ -259,13 +268,17 @@ class Game {
 			// draw halfway line
 			drawLine("#444444", [C.MAX_X / 2, 0], [C.MAX_X / 2, C.MAX_Y]);
 
+			// draw goals
+			drawCircle("#ff000066", [C.X_GOAL_1, C.Y_GOAL_1], C.SZ_GOAL);
+			drawCircle("#2c33b266", [C.X_GOAL_2, C.Y_GOAL_2], C.SZ_GOAL);
+
 			// handle/draw players
 			Object.keys(self.players).forEach(key => {
 				const player = self.players[key];
 				if (player.id === self.socket.id) self.curPlayer = player;
 
 				// draw lad
-				self.ctx.fillStyle = player.team === 1 ? "#ff0000" : "#00ff00";
+				self.ctx.fillStyle = player.team === 1 ? "#ff0000" : "#2c33b2";
 				self.ctx.beginPath();
 				self.ctx.arc(self.ptX(player.x), self.ptY(player.y), C.SZ_PLAYER, 0, 2 * Math.PI);
 				self.ctx.fill();
@@ -317,7 +330,7 @@ class Game {
 
 			// draw ball
 			if (self.ball) {
-				const ballCol = self.ball.team === 0 ? "#000000" : self.ball.team === 1 ? "#ff0000" : "#00ff00";
+				const ballCol = self.ball.team === 0 ? "#000000" : self.ball.team === 1 ? "#ff0000" : "#2c33b2";
 				self.ctx.fillStyle = ballCol;
 				self.ctx.beginPath();
 				self.ctx.arc(self.ptX(self.ball.point[0]), self.ptY(self.ball.point[1]), 2, 0, 2 * Math.PI);
@@ -340,6 +353,13 @@ class Game {
 				self.ctx.lineTo(self.ptX(out2[0]), self.ptY(out2[1]));
 				self.ctx.stroke();
 				self.ctx.closePath();
+			}
+
+			// draw score
+			if (self.score) {
+				self.ctx.fillStyle = "black";
+				self.ctx.font = "16px serif";
+				self.ctx.fillText(`SCORE: ${self.score["1"]} - ${self.score["2"]}`, self.maxX / 2, 20);
 			}
 
 			// handle player death state change TODO automate/standardise this for all server data?

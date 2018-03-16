@@ -51,6 +51,20 @@ class Player {
 	}
 }
 
+class Ball {
+	constructor () {
+		this.reset();
+	}
+
+	reset () {
+		this.point = [C.MAX_X / 2, C.MAX_Y / 2];
+		this.dir = [0, 0];
+		this.team = 0;
+		this.caughtBy = [];
+		this.lastShot = 0;
+	}
+}
+
 class GameServer {
 	start () {
 		const self = this;
@@ -80,12 +94,10 @@ class GameServer {
 
 		function doAddSocketHandlers () {
 			self.players = {};
-			self.ball = {
-				point: [C.MAX_X / 2, C.MAX_Y / 2],
-				dir: [0, 0],
-				team: 0,
-				caughtBy: [],
-				lastShot: 0
+			self.ball = new Ball();
+			self.score = {
+				1: 0,
+				2: 0
 			};
 			io.on("connection", (socket) => {
 				socket.on("player-new", (data) => {
@@ -172,15 +184,40 @@ class GameServer {
 
 		function doUpdateBall (now) {
 			function doCheckCollision (b) {
+				const basePos = b.point;
+				const endPos = [...basePos];
+				mat.vec2.add(endPos, basePos, b.dir);
+				// cheeky hack to prevent the ball "stalling" and becoming un-interactable
+				// FIXME replace with point-circle intersection check
+				if (b.dir[0] === 0 && b.dir[1] === 0) {
+					mat.vec2.add(endPos, endPos, [0.1, 0.1]);
+				}
+				// check for ball-goal collisions
+				let inGoal = false;
+				const g1 = [C.X_GOAL_1, C.Y_GOAL_1];
+				const g2 = [C.X_GOAL_2, C.Y_GOAL_2];
+				function checkHandleGoal (goalPoint, team) {
+					if (lineSegmentInCircle(basePos, endPos, goalPoint, C.SZ_GOAL)) {
+						inGoal = true;
+						const nuScore = ++self.score[team];
+						if (nuScore >= 5) {
+							Object.values(self.players).forEach(p => {
+								if (p.team !== team) p.dead = true;
+							});
+							self.score = {1: 0, 2: 0};
+						}
+					}
+				}
+				checkHandleGoal(g2, 1);
+				checkHandleGoal(g1, 2);
+				if (inGoal) {
+					b.reset();
+					return;
+				}
+
 				// check for player-ball collisions
 				Object.values(self.players).forEach(p => {
-					const basePos = b.point;
-					const endPos = [...basePos];
-					mat.vec2.add(endPos, basePos, b.dir);
-					// cheeky hack to prevent the ball "stalling" and becoming un-interactable
-					if (b.dir[0] === 0 && b.dir[1] === 0) {
-						mat.vec2.add(endPos, endPos, [p.dir[0] > 0 ? 0.1 : -0.1, p.dir[1] > 0 ? 0.1 : -0.1]);
-					}
+					if (p.dead) return;
 					const pPos = [p.x, p.y];
 
 					if ((now - b.lastShot > C.TM_MIN_SHOT_DUR) && lineSegmentInCircle(basePos, endPos, pPos, C.SZ_PLAYER_BALL_CATCH)) {
@@ -285,7 +322,8 @@ class GameServer {
 			// TODO only send the data needed, instead of all the internals
 			io.sockets.emit("state", {
 				players: self.players,
-				ball: self.ball
+				ball: self.ball,
+				score: self.score
 			});
 		}
 
@@ -302,10 +340,7 @@ class GameServer {
 			const bX = self.ball.point[0] > C.MAX_X || self.ball.point[0] < C.MIN_X;
 			const bY = self.ball.point[1] > C.MAX_Y || self.ball.point[1] < C.MIN_Y;
 			if (bX || bY) {
-				self.ball.point = [C.MAX_X / 2, C.MAX_Y / 2];
-				self.ball.caughtBy = [];
-				self.ball.team = 0;
-				self.ball.lastShot = 0;
+				self.ball.reset();
 			}
 		}
 
